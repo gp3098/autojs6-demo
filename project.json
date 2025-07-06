@@ -1,0 +1,11 @@
+{
+  "name": "任务助手",
+  "main": "dist/main.js",
+  "ignore": ["build", "src", "autojs6-sample"],
+  "launchConfig": {
+    "hideLogs": true
+  },
+  "packageName": "com.gp3098.taskhelper",
+  "versionName": "1.0.0",
+  "versionCode": 1
+}

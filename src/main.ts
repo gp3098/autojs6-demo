@@ -21,6 +21,8 @@ class AppMgr {
 }
 
 function main(): void {
+  console.launch()
+  console.show()
   try {
     var appMgr = new AppMgr();
     

@@ -8,7 +8,7 @@
     "build:rhino": "babel src --extensions \".ts,.tsx\" --out-dir dist --config-file ./babel.config.rhino.js",
     "build:simple": "babel src --extensions \".ts,.tsx\" --out-dir dist --config-file ./babel.config.simple.js",
     "build:watch": "babel src --extensions \".ts,.tsx\" --out-dir dist --watch",
-    "build:watch:rhino": ."babel src --extensions \".ts,.tsx\" --out-dir dist --watch --config-file ./babel.config.rhino.js",
+    "build:watch:rhino": "babel src --extensions \".ts,.tsx\" --out-dir dist --watch --config-file ./babel.config.rhino.js",
     "dev": "node dev.js",
     "dev:rhino": "babel src --extensions \".ts,.tsx\" --out-dir dist --watch --config-file ./babel.config.rhino.js --verbose",
     "dev:simple": "babel src --extensions \".ts,.tsx\" --out-dir dist --watch --verbose",

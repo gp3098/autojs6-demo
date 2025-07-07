@@ -1,11 +1,35 @@
 {
   "name": "任务助手",
   "main": "dist/main.js",
-  "ignore": ["build", "src", "autojs6-sample"],
-  "launchConfig": {
-    "hideLogs": true
-  },
   "packageName": "com.gp3098.taskhelper",
   "versionName": "1.0.0",
-  "versionCode": 1
+  "versionCode": 1,
+  "assets": [],
+  "encryptLevel": 0,
+  "useFeatures": [],
+  "launchConfig": {
+    "displaySplash": true,
+    "hideLogs": false,
+    "splashText": "Powered by AutoJs6",
+    "stableMode": false
+  },
+  "optimization": {
+    "removeOpenCv": false,
+    "unusedResources": false
+  },
+  "scripts": {},
+  "ignore": [
+    "/.internal/",
+    "/build/",
+    "/node_modules/",
+    "/out/",
+    "/declarations/",
+    "/autojs6-dts/",
+    "/autojs6-sample/",
+    "/.vscode/",
+    "/.git/",
+    "/.idea/",
+    "/.DS_Store/",
+    "/src/"
+  ]
 }

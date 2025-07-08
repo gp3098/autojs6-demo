@@ -19,6 +19,10 @@
   },
   "scripts": {},
   "ignore": [
+    "/*.json",
+    "/*.config",
+    "/*.js",
+    "/*.md",
     "/.internal/",
     "/build/",
     "/node_modules/",

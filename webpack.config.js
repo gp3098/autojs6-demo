@@ -1,0 +1,82 @@
+const path = require('path');
+
+/**
+ * Webpack configuration for AutoJS6 demo project
+ * Builds TypeScript source files into a single main.js bundle
+ */
+module.exports = {
+  // 开发模式，可以改为 'production' 进行生产打包
+  mode: 'development',
+  
+  // 入口文件
+  entry: './src/main.ts',
+  
+  // 输出配置
+  output: {
+    filename: 'main.js',
+    path: path.resolve(__dirname, 'dist'),
+    clean: true, // 构建前清理输出目录
+  },
+  
+  // 模块解析配置
+  resolve: {
+    extensions: ['.ts', '.tsx', '.js', '.jsx'],
+    modules: ['node_modules'],
+  },
+  
+  // 模块加载器
+  module: {
+    rules: [
+      {
+        test: /\.tsx?$/,
+        use: {
+          loader: 'ts-loader',
+          options: {
+            // 使用专门的webpack TypeScript配置
+            configFile: 'tsconfig.webpack.json',
+            // 跳过类型检查，仅进行转译
+            transpileOnly: true,
+          }
+        },
+        exclude: /node_modules/,
+      },
+    ],
+  },
+  
+  // 开发工具
+  devtool: 'source-map',
+  
+  // 优化配置
+  optimization: {
+    // 不进行代码分割，保持单文件输出
+    splitChunks: {
+      chunks: 'all',
+      minSize: 0,
+      cacheGroups: {
+        default: false,
+        vendors: false,
+        // 将所有代码打包到一个文件
+        bundle: {
+          name: 'main',
+          chunks: 'all',
+          enforce: true
+        }
+      }
+    }
+  },
+  
+  // 外部依赖 - AutoJS6 相关的全局对象不需要打包
+  externals: {
+    // 如果有需要排除的全局变量，可以在这里配置
+    // 'console': 'console',
+    // 'global': 'global'
+  },
+  
+  // 目标环境 - 设置为node以适配AutoJS6环境
+  target: 'node',
+  
+  // 性能提示
+  performance: {
+    hints: false // 关闭性能提示
+  }
+}; 

@@ -1,0 +1,46 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    /* 专门用于webpack打包的TypeScript配置 */
+    "target": "ES5",
+    "module": "ES2015",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    
+    /* 输出相关 */
+    "declaration": false,
+    "sourceMap": true,
+    "removeComments": false,
+    
+    /* 兼容性设置 */
+    "downlevelIteration": true,
+    "importHelpers": false,
+    
+    /* 类型根目录 */
+    "typeRoots": [
+      "./declarations",
+      "./node_modules/@types"
+    ],
+    
+    /* 跳过有问题的类型检查 */
+    "types": []
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    ".bak",
+    ".test",
+    "autojs6-sample"
+  ]
+} 

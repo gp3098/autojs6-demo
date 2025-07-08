@@ -9,6 +9,11 @@
     "build:simple": "babel src --extensions \".ts,.tsx\" --out-dir dist --config-file ./babel.config.simple.js",
     "build:watch": "babel src --extensions \".ts,.tsx\" --out-dir dist --watch",
     "build:watch:rhino": "babel src --extensions \".ts,.tsx\" --out-dir dist --watch --config-file ./babel.config.rhino.js",
+    "webpack:build": "webpack --config webpack.config.js",
+    "webpack:build:prod": "webpack --config webpack.prod.config.js",
+    "webpack:watch": "webpack --config webpack.config.js --watch",
+    "bundle": "npm run webpack:build:prod",
+    "bundle:dev": "npm run webpack:build",
     "dev": "node dev.js",
     "dev:rhino": "babel src --extensions \".ts,.tsx\" --out-dir dist --watch --config-file ./babel.config.rhino.js --verbose",
     "dev:simple": "babel src --extensions \".ts,.tsx\" --out-dir dist --watch --verbose",
@@ -39,6 +44,10 @@
     "@babel/plugin-transform-spread": "^7.27.1",
     "@babel/plugin-transform-template-literals": "^7.27.1",
     "@babel/preset-env": "^7.28.0",
-    "@babel/preset-typescript": "^7.27.1"
+    "@babel/preset-typescript": "^7.27.1",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^6.0.1"
   }
 }

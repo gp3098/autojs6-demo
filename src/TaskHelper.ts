@@ -1,4 +1,4 @@
-export class AppMgr {
+export class TaskHelper {
   private name: string;
 
   constructor() {
@@ -16,5 +16,6 @@ export class AppMgr {
   // 使用普通方法而不是箭头函数属性
   handleClick(): void {
     console.log('Button clicked!');
+    app.launch('红果免费短剧');
   }
 }

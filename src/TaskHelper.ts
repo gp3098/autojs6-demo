@@ -65,6 +65,8 @@ export class TaskHelper {
 
     this.closePopup5();
 
+    this.closePopup6();
+
     const navResult = this.tryNavigateToWelfarePage();
     console.log('Navigation result:', navResult);
     if (!navResult) {
@@ -192,6 +194,17 @@ export class TaskHelper {
     }
   };
 
+  /**
+   * 百万金币平分的“我知道了”按钮
+   */
+  closePopup6 = () => {
+    const knowButton = textContains('我知道了').findOne(3000);
+    if (knowButton) {
+      log('Clicked on know button');
+      knowButton.clickBounds(10, 10);
+    }
+  };
+
   startTasks = async () => {
     log('Starting tasks');
     this.executeOpenChestTask();
@@ -243,8 +256,14 @@ export class TaskHelper {
   executeMillionGoldTask = () => {
     toastLog('任务： 点击“百万金币平分”的“立即参与”按钮');
     //点击百万金币平分的立即参与按钮
-    const millionGoldButton = textContains('百万金币平分').findOnce()?.clickBounds(10, 10);
-    log('Clicked on million gold button', millionGoldButton);
+    const millionGoldButton = textContains('百万金币平分').findOnce();
+    log('millionGoldButton', millionGoldButton);
+    if (millionGoldButton.findOne(textContains('去看看') as any)) {
+      log('Found "去看看" button, skipping click');
+      return;
+    }
+    const millionGoldButtonResult = millionGoldButton?.clickBounds(10, 10);
+    log('Clicked on million gold button');
     waitForActivity('com.dragon.read.bullet.widget.BulletContainerActivity', 1000, {
       then: () => {
         log('Activity is ready: com.dragon.read.pages.main.MainFragmentActivity');
@@ -254,11 +273,7 @@ export class TaskHelper {
           log('Clicked on participate button');
           participateButton.clickBounds(10, 10);
           //点完后会弹出新的弹窗，然后要点我知道了按钮
-          const knowButton = textContains('我知道了').findOne(3000);
-          if (knowButton) {
-            log('Clicked on know button');
-            knowButton.clickBounds(10, 10);
-          }
+          this.closePopup6();
         } else {
           log('Participate button not found');
         }

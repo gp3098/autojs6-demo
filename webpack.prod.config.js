@@ -50,22 +50,15 @@ module.exports = {
   optimization: {
     // 启用代码压缩
     minimize: true,
-    // 不进行代码分割，保持单文件输出
-    splitChunks: {
-      chunks: 'all',
-      minSize: 0,
-      cacheGroups: {
-        default: false,
-        vendors: false,
-        // 将所有代码打包到一个文件
-        bundle: {
-          name: 'main',
-          chunks: 'all',
-          enforce: true
-        }
-      }
-    }
+    // 不进行代码分割，交由 Webpack 和 LimitChunkCountPlugin 保持单文件输出
   },
+  
+  plugins: [
+    // 强制将所有代码打包到一个文件，避免产生额外的 chunk 文件
+    new (require('webpack')).optimize.LimitChunkCountPlugin({
+      maxChunks: 1
+    })
+  ],
   
   // 外部依赖 - AutoJS6 相关的全局对象不需要打包
   externals: {

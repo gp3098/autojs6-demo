@@ -18,27 +18,8 @@ autojs6-demo/
 ## 可用脚本
 
 ### 构建相关
-- `npm run build` - 标准构建 (ES6+)
-- `npm run build:rhino` - Rhino 1.8.0 兼容构建 (ES5) **推荐用于 AutoJS6**
-- `npm run build:simple` - 简化构建 (最小转换)
+- `pnpm webpack:watch` - Rhino 1.8.0 兼容构建 (ES5) **推荐用于 AutoJS6** 日常开发
 - `npm run clean` - 清理dist目录
-
-### 开发相关
-- `npm run dev` - 标准开发模式
-  - 监视src目录变化
-  - 自动编译TypeScript文件
-  - 友好的输出提示
-
-- `npm run dev:rhino` - Rhino 兼容开发模式 **推荐用于 AutoJS6**
-  - 使用 Rhino 1.8.0 兼容配置
-  - 自动转换所有现代语法到 ES5
-  
-- `npm run dev:simple` - 简单的监视模式
-  - 使用Babel原生的--watch参数
-  - 输出详细的编译信息
-
-- `npm run build:watch` - 标准监视模式构建
-- `npm run build:watch:rhino` - Rhino 兼容监视模式构建
 
 ### 运行相关
 - `npm run start` - 运行编译后的main.js文件
@@ -58,7 +39,7 @@ autojs6-demo/
 
 4. **运行代码**：
    ```bash
-   npm run start
+   pnpm webpack:watch
    ```
 
 ## Babel配置

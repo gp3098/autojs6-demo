@@ -54,10 +54,11 @@ module.exports = {
   },
   
   plugins: [
-    // 强制将所有代码打包到一个文件，避免产生额外的 chunk 文件
+    // 强制将所有代码打包到一个文件
     new (require('webpack')).optimize.LimitChunkCountPlugin({
       maxChunks: 1
-    })
+    }),
+    new (require('webpack')).BannerPlugin({ banner: '"ui";', raw: true })
   ],
   
   // 外部依赖 - AutoJS6 相关的全局对象不需要打包

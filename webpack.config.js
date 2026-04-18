@@ -55,7 +55,9 @@ module.exports = {
     // 强制将所有代码打包到一个文件，避免产生额外的 chunk 文件
     new (require('webpack')).optimize.LimitChunkCountPlugin({
       maxChunks: 1
-    })
+    }),
+    // 注入 "ui"; 魔法声明，让 Auto.js 可以跑原生 UI 代码
+    new (require('webpack')).BannerPlugin({ banner: '"ui";', raw: true })
   ],
   
   // 外部依赖 - AutoJS6 相关的全局对象不需要打包

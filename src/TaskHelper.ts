@@ -1,366 +1,352 @@
+import { BehaviorSubject, Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
+
+// ============================================
+// 状态枚举定义
+// ============================================
+
+export enum GlobalState {
+  INIT = 'INIT',                 // 初始状态
+  APP_LAUNCHING = 'APP_LAUNCHING',// 检查/启动应用
+  WELFARE_PAGE = 'WELFARE_PAGE', // 处于福利页，分发任务
+  SUBTASK_AD = 'SUBTASK_AD',     // 正在执行看广告子任务
+  FALLBACK = 'FALLBACK',         // 迷失页面，尝试不断回退
+  FINISHED = 'FINISHED'          // 全部任务完成
+}
+
+export enum AdState {
+  IDLE = 'IDLE',                               // 未激活
+  WATCHING_AD = 'WATCHING_AD',                 // 正在观看广告（监测跳过/关闭按钮）
+  WAITING_FOR_REWARD = 'WAITING_FOR_REWARD',   // 广告结束，尝试点击立即领取/看视频再领
+  DONE = 'DONE'                                // 单次看视频结束
+}
+
 export class TaskHelper {
-  //恭喜你获得xxx金币弹窗的selector
-  get popup1Selector() {
-    return id('com.phoenix.read:id/cc5');
-  }
+  // 定义状态机数据流
+  private globalState$ = new BehaviorSubject<GlobalState>(GlobalState.INIT);
+  private adState$ = new BehaviorSubject<AdState>(AdState.IDLE);
 
-  get popup1CloseBtn() {
-    return this.popup1Selector.findOne(1000);
-  }
+  // 销毁流，用于结束任务
+  private destroy$ = new Subject<void>();
 
-  get popup2Selector() {
-    return textContains('看视频再领');
-  }
+  // 销毁标志，用于结束 while 轮询
+  private isDestroyed = false;
 
-  get popup5Selector() {
-    return textContains('看视频最高再领');
-  }
+  // 记录持续在未知页面的次数，达到阈值触发 Fallback
+  private lostCount = 0;
 
-  constructor() {}
+  constructor() { }
 
-  // 使用普通方法而不是箭头函数属性
-  async start() {
-    log('TaskHelper started');
+  // ============================================
+  // 公共入口
+  // ============================================
+
+  public start() {
+    log('RxJS TaskHelper started');
     auto.waitFor();
+    this.setupStateMachine();
+
+    // 初始化状态，进入应用启动环节
+    this.globalState$.next(GlobalState.APP_LAUNCHING);
+    
+    // ❗️ 在 AutoJs Rhino 引擎里使用 Webpack 打包的 setInterval (RxJS interval 底层依赖) 会导致
+    // 脚本以为没有挂起的任务而直接结束。最稳健的方案是使用主线程原生的 while + sleep() 轮询。
+    while (!this.isDestroyed) {
+      this.pollUIAndTransition();
+      sleep(1500); // 每次扫描间隔 1.5 秒
+    }
+    
+    log('Main Poll Loop Completed');
+  }
+
+  public stop() {
+    toastLog('停止全部任务');
+    this.isDestroyed = true;
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  // ============================================
+  // 状态机核心轮询与切换
+  // ============================================
+
+  private pollUIAndTransition() {
     try {
-      //前往福利页面
-      const res = this.gotoWelfarePage();
-      log('start target tasks', res);
-      await this.startTasks();
+      const state = this.globalState$.getValue();
+
+      // 全局 UI 弹窗兜底拦截
+      // 如果检测到弹窗并处理了，我们会跳过这一帧里的业务逻辑（避免同时点错）
+      if (this.handleGlobalPopups()) {
+        return;
+      }
+
+      switch (state) {
+        case GlobalState.APP_LAUNCHING:
+          this.handleAppLaunching();
+          break;
+        case GlobalState.WELFARE_PAGE:
+          this.handleWelfarePage();
+          break;
+        case GlobalState.SUBTASK_AD:
+          this.pollAdSubTask();
+          break;
+        case GlobalState.FALLBACK:
+          this.handleFallback();
+          break;
+        case GlobalState.FINISHED:
+          this.stop();
+          break;
+      }
     } catch (error) {
-      console.error('Error in start method:', error);
-      toastLog('Error in start method: ' + error);
+      console.error('Error in pollUIAndTransition', error);
     }
   }
 
-  gotoWelfarePage() {
-    log('gotoWelfarePage called');
-    // 打开红果免费短剧应用
-    launchApp('红果免费短剧');
-    //日志打当前的活动名称
-    const currentActivityName = currentActivity();
-    toastLog(`当前活动名称: ${currentActivityName}`);
-    //日志打印当前包名称
-    const currentPackageName = currentPackage();
-    toastLog(`当前包名称: ${currentPackageName}`);
-    //处理升级弹窗，自动关闭
-    this.closeUpgradePopup();
-
-    //关闭签到弹窗
-    toastLog('尝试关闭签到弹窗');
-    const signInPopup = textContains('立即签到').findOne(1000);
-    if (signInPopup?.clickBounds(10, 10)) {
-      log('Clicked on sign-in popup');
-    } else {
-      log('Sign-in popup not found or click failed');
-    }
-
-    this.closePopup1();
-
-    this.closePopup2();
-
-    this.closePopup3();
-
-    this.closePopup4();
-
-    this.closePopup5();
-
-    this.closePopup6();
-
-    const navResult = this.tryNavigateToWelfarePage();
-    console.log('Navigation result:', navResult);
-    if (!navResult) {
-      log('Welfare navigate button not found1, trying to go back');
-      const backBtnSelector = id('com.phoenix.read:id/dam');
-      if (backBtnSelector.exists()) {
-        log('Click back button');
-        const goBackResult = backBtnSelector.findOne(1000)?.click();
-        if (!goBackResult) {
-          back();
-        }
-        const res = this.tryNavigateToWelfarePage();
-        log(`tryNavigateToWelfarePage result: ${res}`);
-      } else {
-        if (id('com.phoenix.read:id/d94').exists()) {
-          log('尝试通过按下立即领取按钮打开福利页面');
-          id('com.phoenix.read:id/d94').findOne(1000)?.clickBounds(10, 10);
-          return;
-        }
-        back();
-        const res = this.tryNavigateToWelfarePage();
-        log(`tryNavigateToWelfarePage result: ${res}`);
-      }
-    }
-  }
-
-  tryNavigateToWelfarePage = () => {
-    log('try Navigating to welfare page');
-    const findWelfareNavigateSelector = id('com.phoenix.read:id/aeb');
-    if (findWelfareNavigateSelector.exists()) {
-      findWelfareNavigateSelector.findOne(1).clickBounds(10, 10);
-      log('Clicked on welfare navigate button');
-      return true;
-    } else {
-      log('Welfare navigate button not found');
-      return false;
-    }
-  };
-
-  closeUpgradePopup = () => {
-    log('Closing upgrade popup if exists');
-    // 检查是否有升级弹窗
-    const upgradePopup1 = textContains('升级').findOne(1000);
-    const upgradePopup2 = textContains('新版本邀请你来抢险体验').findOne(1000);
-    const upgradePopup3 = id('com.phoenix.read:id/gty').visibleToUser(true).findOne(1000);
-    if (upgradePopup1 || upgradePopup2 || upgradePopup3) {
-      // 如果存在升级弹窗，点击关闭按钮
-      // upgradePopup1?.click();
-      // upgradePopup2?.click();
-      if (upgradePopup3) {
-        toastLog('尝试自动关闭升级弹窗');
-        const result = id('com.phoenix.read:id/gth').click();
-        result && toastLog('升级弹窗已关闭');
-      }
-      return;
-    }
-    log('No upgrade popup found');
-  };
-
-  /**
-   * 关闭“恭喜你获得xx金币”弹窗
-   * @returns
-   */
-  closePopup1 = () => {
-    // log('关闭“恭喜你获得xx金币”弹窗');
-    if (this.popup1Selector.exists()) {
-      log('恭喜你获得xx金币弹窗已找到，尝试关闭');
-      if (this.popup1CloseBtn?.clickBounds(10, 10)) {
-        log('成功关闭“恭喜你获得xx金币”弹窗');
-      } else {
-        log('未能成功关闭“恭喜你获得xx金币”弹窗');
-      }
-    }
-  };
-
-  /**
-   * 关闭“看视频再领”弹窗
-   * @returns
-   */
-  closePopup2 = () => {
-    if (this.popup2Selector.exists()) {
-      log('看视频再领弹窗已找到，尝试关闭');
-      if (this.popup2Selector.findOne(1000).clickBounds(0, 250)) {
-        log('成功关闭“看视频再领”弹窗');
-      } else {
-        log('未能成功关闭“看视频再领”弹窗');
-      }
-    }
-  };
-
-  /**
-   * 关闭
-   */
-  closePopup3 = () => {
-    const recommendBtnSelector = id('com.phoenix.read:id/f').visibleToUser(true).clickable(true);
-    if (recommendBtnSelector.exists()) {
-      log('找到了推荐按钮，尝试关闭');
-      recommendBtnSelector.findOne(1000)?.clickBounds(10, 10);
-    }
-  };
-
-  /**
-   * 关闭“是否会推荐给其他人”的弹窗
-   */
-  closePopup4 = () => {
-    const btn = id('com.phoenix.read:id/bxe').visibleToUser(true).clickable(true);
-    if (btn.exists()) {
-      log('找到了推荐的关闭按钮，尝试关闭');
-      btn.findOne(1000)?.click();
-    }
-  };
-
-  /**
-   * 关闭“看视频最高再领”弹窗
-   * @returns
-   */
-  closePopup5 = () => {
-    if (this.popup5Selector.exists()) {
-      log('看视频最高再领弹窗已找到，尝试关闭');
-      if (this.popup5Selector.findOne(1000).clickBounds(0, 250)) {
-        log('成功关闭“看视频最高再领”弹窗');
-      } else {
-        log('未能成功关闭“看视频最高再领”弹窗');
-      }
-    }
-  };
-
-  /**
-   * 百万金币平分的“我知道了”按钮
-   */
-  closePopup6 = () => {
-    const knowButton = textContains('我知道了').findOne(3000);
-    if (knowButton) {
-      log('Clicked on know button');
-      knowButton.clickBounds(10, 10);
-    }
-  };
-
-  startTasks = async () => {
-    log('Starting tasks');
-    this.executeOpenChestTask();
-
-    this.executeClickRewardTask();
-
-    this.executeMillionGoldTask();
-  };
-  /**
-   * 开宝箱得币任务
-   */
-  executeOpenChestTask = () => {
-    toastLog('任务： 开宝箱得金币');
-    const openChestResult = textContains('开宝箱得金币').findOnce()?.clickBounds(10, 10);
-    if (openChestResult) {
-      log('Clicked on open chest button');
-      //关闭弹窗
-      id('com.phoenix.read:id/cc5').findOnce()?.clickBounds(10, 10);
-      log('Closed popup after opening chest');
-    }
-  };
-
-  /**
-   * 任务: 点击立即领取
-   */
-  executeClickRewardTask = () => {
-    toastLog('任务： 点击立即领取');
-    //点击下一个奖励
-    // textContains('下一个奖励').findOnce()?.clickBounds(10, 10);
-    // toastLog('点击下一个奖励');
-    //关闭弹窗
-    // id('com.phoenix.read:id/cc5').findOnce()?.clickBounds(10, 10);
-    //点击领取奖励
-    const clickRewardResult = text('立即领取').clickable(true).visibleToUser(true).findOnce()?.clickBounds(10, 10);
-
-    if (clickRewardResult) {
-      toastLog('成功点击领取奖励');
-      const closePopupResult = id('com.phoenix.read:id/cc5').findOnce()?.clickBounds(10, 10);
-      if (closePopupResult) {
-        toastLog('成功关闭弹窗');
-      }
-    }
-    this.closePopup2();
-  };
-
-  /**
-   * 任务: 点击“百万金币平分”的“立即参与”按钮，等待新的活动页面加载，再点击“立即打卡参与”按钮
-   */
-  executeMillionGoldTask = () => {
-    toastLog('任务： 点击“百万金币平分”的“立即参与”按钮');
-    //点击百万金币平分的立即参与按钮
-    const millionGoldButton = textContains('百万金币平分').findOnce();
-    log('millionGoldButton', millionGoldButton);
-    if (millionGoldButton.findOne(textContains('去看看') as any)) {
-      log('Found "去看看" button, skipping click');
-      return;
-    }
-    const millionGoldButtonResult = millionGoldButton?.clickBounds(10, 10);
-    log('Clicked on million gold button');
-    waitForActivity('com.dragon.read.bullet.widget.BulletContainerActivity', 1000, {
-      then: () => {
-        log('Activity is ready: com.dragon.read.pages.main.MainFragmentActivity');
-        // 点击“立即打卡参与”按钮
-        const participateButton = textContains('立即打卡参与').findOne(3000);
-        if (participateButton) {
-          log('Clicked on participate button');
-          participateButton.clickBounds(10, 10);
-          //点完后会弹出新的弹窗，然后要点我知道了按钮
-          this.closePopup6();
-        } else {
-          log('Participate button not found');
-        }
-      },
-      else() {
-        log('Activity not found within timeout');
-      },
+  private setupStateMachine() {
+    // 监听状态变化并打印日志 (可选)
+    this.globalState$.pipe(takeUntil(this.destroy$)).subscribe(s => {
+      console.log(`[Global State Change] => ${s}`);
     });
-  };
+    this.adState$.pipe(takeUntil(this.destroy$)).subscribe(s => {
+      if (s !== AdState.IDLE) {
+        console.log(`[Ad State Change] => ${s}`);
+      }
+    });
+  }
 
-  // getTasks = async () => {
-  //   //打开红果免费短剧
-  //   launchApp('红果免费短剧');
-  //   // launchPackage('com.phoenix.read');
+  // ============================================
+  // 具体状态处理器 
+  // ============================================
 
-  //   waitForActivity('com.dragon.read.component.shortvideo.impl.ShortSeriesActivity', 1000, {
-  //     then: () => {
-  //       log('Activity is ready: com.dragon.read.component.shortvideo.impl.ShortSeriesActivity');
-  //       // swipe(500, 1000, 500, 500, 500);
-  //       back();
-  //       waitForActivity('com.dragon.read.pages.main.MainFragmentActivity', 1000, {
-  //         then: () => {
-  //           log('Activity is ready: com.dragon.read.pages.main.MainFragmentActivity');
-  //           this.activityReadyCallback();
-  //           textContains('立即签到').click();
-  //         },
-  //         else() {
-  //           log('Activity not found within timeout');
-  //         },
-  //       });
-  //     },
-  //     else() {
-  //       log('Activity not found within timeout');
-  //     },
-  //   });
-  //   //等待打开成功
-  //   waitForActivity('com.dragon.read.pages.main.MainFragmentActivity', 1000, {
-  //     then: () => {
-  //       log('Activity is ready: com.dragon.read.pages.main.MainFragmentActivity');
-  //       this.activityReadyCallback();
-  //       textContains('立即签到').click();
-  //     },
-  //     else() {
-  //       log('Activity not found within timeout');
-  //     },
-  //   });
+  /**
+   * 全局弹窗拦截器
+   * 包含：升级弹窗、签到弹窗、推荐弹窗等
+   * 返回 true 表示有弹窗被处理
+   */
+  private handleGlobalPopups(): boolean {
+    let popupHandled = false;
 
-  //   waitForActivity('com.bytedance.ies.bullet.service.popup.ui.a.a', 1000, {
-  //     then: () => {
-  //       log('Activity is ready: com.bytedance.ies.bullet.service.popup.ui.a.a');
-  //       // 关闭弹窗
-  //       // toastLog(textContains('立即签到').findOne(1000).click());
-  //       // log(textContains('立即签到').findOne(1000).clickBounds(10, 10));
-  //       wait(() => textContains('立即签到').findOne(1000), 1000, {
-  //         then: () => {
-  //           log('Found "立即签到" button');
-  //           textContains('立即签到').click();
-  //         },
-  //         else() {
-  //           log('"立即签到" button not found');
-  //           if (textContains('签到成功').exists()) {
-  //             log('签到成功');
+    // 1. 升级弹窗
+    const upgradeSelectors = [
+      textContains('升级').findOnce(),
+      textContains('新版本邀请你来抢险体验').findOnce(),
+      id('com.phoenix.read:id/gty').visibleToUser(true).findOnce()
+    ];
+    if (upgradeSelectors.some(node => node != null)) {
+      const closeObj = id('com.phoenix.read:id/gth').findOnce();
+      if (closeObj && closeObj.click()) {
+        toastLog('自动关闭了升级弹窗');
+        popupHandled = true;
+      }
+    }
 
-  //             // const button = textContains('看视频').findOne(1000);
-  //             // if (button) {
-  //             //   log('Found "看视频" button');
-  //             //   button.clickBounds(10, 10);
-  //             // } else {
-  //             //   log('"看视频" button not found');
-  //             // }
-  //           }
-  //         },
-  //       });
-  //     },
-  //     else() {
-  //       log('Activity not found within timeout');
-  //     },
-  //   });
+    // 2. 签到弹窗
+    const signInPopup = textContains('立即签到').findOnce();
+    if (signInPopup) {
+      signInPopup.clickBounds(10, 10);
+      toastLog('点击了立即签到弹窗');
+      popupHandled = true;
+    }
 
-  //   //监测当前页面
+    // 3. 询问是否推荐的弹窗
+    const recommendBtn = id('com.phoenix.read:id/f').visibleToUser(true).clickable(true).findOnce();
+    const recommendCloseBtn = id('com.phoenix.read:id/bxe').visibleToUser(true).clickable(true).findOnce();
+    if (recommendBtn || recommendCloseBtn) {
+      recommendCloseBtn?.click();
+      toastLog('自动关闭推荐弹窗');
+      popupHandled = true;
+    }
 
-  //   //检查是否有弹窗要关闭
-  //   //点击“福利”按钮
-  // };
+    // 4. 百万金币平分 - “我知道了” 弹窗
+    const knowButton = textContains('我知道了').findOnce();
+    if (knowButton) {
+      knowButton.clickBounds(10, 10);
+      toastLog('关闭了“我知道了”弹窗');
+      popupHandled = true;
+    }
 
-  // activityReadyCallback(): void {
-  //   // 在这里执行需要在活动准备好后进行的操作
-  //   id('aeb').click();
-  // }
+    return popupHandled;
+  }
+
+  /**
+   * APP 启动状态：检查包名，尝试跳转福利页
+   */
+  private handleAppLaunching() {
+    const pkg = currentPackage();
+    const currentAct = currentActivity();
+    if (pkg !== 'com.phoenix.read' || currentAct !== 'com.dragon.read.pages.main.MainFragmentActivity') {
+      console.log('当前包名：' + pkg + ' 当前Activity：' + currentAct);
+      toastLog('启动红果免费短剧应用...当前包名：' + pkg + ' 当前Activity：' + currentAct);
+      launchApp('红果免费短剧');
+      this.lostCount = 0;
+      return; // 等待下一帧检查
+    }
+
+    // 如果处于主应用环境，尝试找【福利】导航按钮去福利页
+    const welfareNavBtn = text('赚钱').findOnce();
+    const welfareAltBtn = id('com.phoenix.read:id/d94').findOnce(); // 另一种变体的立即领取按钮
+
+    if (welfareNavBtn) {
+      log('找到福利入口，准备进入');
+      welfareNavBtn.clickBounds(10, 10);
+      // 跳转成功后，设定状态为福利页
+      this.globalState$.next(GlobalState.WELFARE_PAGE);
+      this.lostCount = 0;
+      log('lostCount: ' + this.lostCount);
+
+
+    } else if (welfareAltBtn) {
+      log('找到另一种福利入口按钮，点击');
+      welfareAltBtn.clickBounds(10, 10);
+      this.globalState$.next(GlobalState.WELFARE_PAGE);
+      this.lostCount = 0;
+    } else {
+      // 没有任何认识的入口按钮，增加迷失计数
+      this.lostCount++;
+      if (this.lostCount > 10) {
+        log('10秒内未找到福利入口，尝试 Fallback 回退机制');
+        this.globalState$.next(GlobalState.FALLBACK);
+      }
+    }
+  }
+
+  /**
+   * 福利页面任务分配枢纽
+   */
+  private handleWelfarePage() {
+    this.lostCount = 0; // 重置计数
+    //福利页面的任务一页显示不下，需要上下滑动才能查看到所有的任务。
+    //福利页面目前能够执行的任务有：
+    //1.看视频转海量金币(需要翻页)
+
+   
+
+    // // 任务1：开宝箱得金币
+    // const openChestBtn = textContains('开宝箱得金币').findOnce();
+    // if (openChestBtn) {
+    //   toastLog('触发: 开宝箱得金币');
+    //   openChestBtn.clickBounds(10, 10);
+    //   this.startAdSubTask();
+    //   return;
+    // }
+
+    // // 任务2：找“看视频再领”、“看视频最高再领”按钮
+    // const watchVideoBtn1 = textContains('看视频再领').clickable(true).findOnce();
+    // const watchVideoBtn2 = textContains('看视频最高再领').clickable(true).findOnce();
+    // if (watchVideoBtn1 || watchVideoBtn2) {
+    //   toastLog('触发: 连续看视频');
+    //   (watchVideoBtn1 || watchVideoBtn2)?.clickBounds(10, 10);
+    //   this.startAdSubTask();
+    //   return;
+    // }
+
+    // // 任务3：百万金币平分
+    // const millionGoldBtn = textContains('百万金币平分').findOnce();
+    // if (millionGoldBtn) {
+    //   if (!textContains('去看看').exists()) {
+    //     toastLog('触发: 百万金币平分活动');
+    //     millionGoldBtn.clickBounds(10, 10);
+    //     // 百万金币平分一般会跳出新的 WebView 页面
+    //     // 这里可以直接等待 “立即打卡参与”
+    //     const participateButton = textContains('立即打卡参与').findOne(3000);
+    //     if (participateButton) {
+    //       participateButton.clickBounds(10, 10);
+    //     }
+    //     return;
+    //   }
+    // }
+
+    // 如果没有任何可做的任务，假设我们要不就挂机，要不就退出
+    // 这里做个简单示例：停留
+    log('福利页暂无匹配任务，等待中...');
+  }
+
+  /**
+   * Fallback: 不断系统回退，来消灭乱飞的页面
+   */
+  private handleFallback() {
+    toastLog('进入 Fallback，尝试返回操作...');
+    const backBtnApp = id('com.phoenix.read:id/dam').findOnce(); // APP 内部的返回小箭头
+    if (backBtnApp) {
+      backBtnApp.click();
+    } else {
+      back(); // 系统级物理返回
+    }
+
+    // 返回后，将状态回调到检查启动状态
+    this.lostCount = 0;
+    this.globalState$.next(GlobalState.APP_LAUNCHING);
+  }
+
+  // ============================================
+  // 子状态机：看广告
+  // ============================================
+
+  private startAdSubTask() {
+    this.globalState$.next(GlobalState.SUBTASK_AD);
+    this.adState$.next(AdState.WATCHING_AD);
+    this.lostCount = 0;
+  }
+
+  private pollAdSubTask() {
+    const s = this.adState$.getValue();
+
+    // 兜底广告内关闭弹窗 (有的广告点完开宝箱会先弹个恭喜获得金币)
+    const collectBtn = id('com.phoenix.read:id/cc5').findOnce(); // 恭喜获得xx金币 的关闭或领取按钮
+    if (collectBtn) {
+      collectBtn.clickBounds(10, 10);
+      return;
+    }
+
+    if (s === AdState.WATCHING_AD) {
+      // 在广告播放中查找跳过/关闭
+      const closeAction = textContains('关闭').findOnce() || textContains('跳过').findOnce();
+      if (closeAction) {
+        log('发现广告关闭/跳过按钮');
+        closeAction.clickBounds(10, 10);
+        // 结束观看后，很可能跳出第二个奖励窗口
+        this.adState$.next(AdState.WAITING_FOR_REWARD);
+        this.lostCount = 0;
+      } else {
+        // 如果找不到关闭跳过，增加计数（防止死等的防卡死逻辑），如果广告真有60秒，这儿需要配合比较大的阈值
+        this.lostCount++;
+        if (this.lostCount > 60) {
+          log('看广告超过预期时间(或卡死)，尝试物理返回拔出');
+          back();
+          this.adState$.next(AdState.DONE);
+          this.lostCount = 0;
+        }
+      }
+    }
+
+    else if (s === AdState.WAITING_FOR_REWARD) {
+      // 广告关闭后，看是否有继续领取的提示
+      const continueRewardBtn = textContains('看视频再领').findOnce() ||
+        textContains('看视频最高再领').findOnce();
+      const directRewardBtn = text('立即领取').clickable(true).visibleToUser(true).findOnce();
+
+      if (continueRewardBtn) {
+        log('出现连播广告奖励提示，继续观看');
+        continueRewardBtn.clickBounds(10, 10);
+        this.adState$.next(AdState.WATCHING_AD); // 兜一圈再回去看广告状态
+      } else if (directRewardBtn) {
+        log('出现立即领取');
+        directRewardBtn.clickBounds(10, 10);
+      } else {
+        // 如果这里屏幕上啥也没了，或者只有 cc5(上方已拦截)，或者识别不出连播提示，认为本次广告流程彻底结束
+        this.lostCount++;
+        if (this.lostCount > 3) {
+          this.adState$.next(AdState.DONE);
+        }
+      }
+    }
+
+    else if (s === AdState.DONE) {
+      log('广告任务闭环完成，回到主状态机');
+      this.globalState$.next(GlobalState.WELFARE_PAGE);
+      this.adState$.next(AdState.IDLE);
+      this.lostCount = 0;
+    }
+  }
+
 }

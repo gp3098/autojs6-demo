@@ -2,13 +2,14 @@ import { TaskManager, TaskRecord } from './core/TaskManager';
 import { StateMachineEngine } from './core/StateMachineEngine';
 import { TaskRunStatus } from './core/Enums';
 
+
 // 在 Webpack 编译后，由于 BannerPlugin 介入，文件顶部会插入 "ui"; 
 // 告诉 AutoJs 运行于 UI 模式
 const taskManager = new TaskManager();
 let currentTabId = 'all';
 
 ui.layout(
-  `<vertical>
+    `<vertical>
       <appbar>
           <toolbar title="自动化任务中心" bg="#2196F3" />
           <tabs id="tabs" bg="#2196F3" textColor="#ffffff" />
@@ -41,12 +42,12 @@ function renderList() {
 const apps = taskManager.getApps();
 (ui as any).tabs.setupWithViewPager(null);
 
-for(let i = 0; i < apps.length; i++) {
+for (let i = 0; i < apps.length; i++) {
     (ui as any).tabs.addTab((ui as any).tabs.newTab().setText(apps[i].name));
 }
 
 (ui as any).tabs.addOnTabSelectedListener(new (com as any).google.android.material.tabs.TabLayout.OnTabSelectedListener({
-    onTabSelected: function(tab: any) {
+    onTabSelected: function (tab: any) {
         currentTabId = apps[tab.getPosition()].id;
         renderList();
     }
@@ -79,7 +80,7 @@ function stopCurrentThread() {
 }
 
 // 点击整个列表项即可执行任务（避免使用 item_bind 带来的 View 复用导致事件叠加的 BUG）
-(ui as any).taskList.on("item_click", function(item: any, i: number, itemView: any, listView: any) {
+(ui as any).taskList.on("item_click", function (item: any, i: number, itemView: any, listView: any) {
     if (item.status === TaskRunStatus.RUNNING) {
         toast('该任务正在运行中...');
         return;
@@ -88,15 +89,15 @@ function stopCurrentThread() {
     runSingleTask(item);
 });
 
-(ui as any).btnAutoAll.on("click", function() {
+(ui as any).btnAutoAll.on("click", function () {
     toast('准备自动连跑所有未完成任务');
     const allTasks = taskManager.tasks;
-    
+
     stopCurrentThread();
     currentThread = threads.start(() => {
         for (const task of allTasks) {
             if (task.status === TaskRunStatus.DONE) {
-                continue; 
+                continue;
             }
 
             updateTaskStatusUI(task.id, TaskRunStatus.RUNNING);
@@ -104,9 +105,9 @@ function stopCurrentThread() {
             const strategy = new StrategyClass();
             const engine = new StateMachineEngine(strategy);
             currentEngine = engine;
-            
+
             engine.start();
-            
+
             updateTaskStatusUI(task.id, TaskRunStatus.DONE);
             currentEngine = null;
         }
@@ -119,7 +120,7 @@ function stopCurrentThread() {
 
 function runSingleTask(task: TaskRecord) {
     stopCurrentThread();
-    
+
     updateTaskStatusUI(task.id, TaskRunStatus.RUNNING);
 
     currentThread = threads.start(() => {
@@ -128,7 +129,7 @@ function runSingleTask(task: TaskRecord) {
         const engine = new StateMachineEngine(strategy);
         currentEngine = engine;
 
-        engine.start(); 
+        engine.start();
 
         updateTaskStatusUI(task.id, TaskRunStatus.DONE);
         currentEngine = null;
@@ -136,3 +137,18 @@ function runSingleTask(task: TaskRecord) {
 }
 
 // 防止 UI 脚本运行完退出，UI 自动持有生命周期
+
+
+// function test() {
+//     //测试截图和ocr功能
+//     console.log('start test screen capture')
+//     if (!requestScreenCapture(false)) {
+//         toastLog('需要截图权限来进行 OCR！');
+//         return;
+//     }
+//     const img = captureScreen();
+//     if (!img) return;
+//     const results = ocr.paddle.detect(img, { useSlim: true, cpuThreadNum: 4 });
+//     console.log('OCR 识别结果', results)
+//     img.recycle();
+// }

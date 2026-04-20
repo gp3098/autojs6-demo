@@ -1,12 +1,13 @@
 import { BehaviorSubject, Subject } from 'rxjs';
 import { scan, takeUntil } from 'rxjs/operators';
 import { DouyinTaskDefinition, DOUYIN_TASKS, DOUYIN_UI_LEXICON } from './DouyinTaskData';
-import { OcrService, OCRFindResult } from './OcrService';
+import { OcrService, OCREntry, OCRFindResult } from './OcrService';
 
 export type DouyinPage = 'UNKNOWN' | 'TASK_HOME' | 'TASK_LIST' | 'AD_VIDEO';
 export type DouyinOverlay =
   | 'NONE'
   | 'LOTTERY_MASK'
+  | 'FLIP_CARD_MASK'
   | 'COUPON_MASK'
   | 'SIGN_IN_MASK'
   | 'SIGN_IN_REWARD_MASK'
@@ -47,6 +48,7 @@ export class DouyinScheduler {
   private isDestroyed = false;
   private overlayStuckCount = 0;
   private lastOverlay: DouyinOverlay = 'NONE';
+  private homeEntryClickTs = 0;
 
   constructor(private readonly taskDefinitions: DouyinTaskDefinition[] = DOUYIN_TASKS) {
     this.setupStateMachine();
@@ -174,6 +176,8 @@ export class DouyinScheduler {
     let overlay: DouyinOverlay = 'NONE';
 
     const hasLotteryMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.lotteryMaskKeywords, { matchMode: 'all' });
+    const hasFlipCardAction = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.flipCardActionKeywords);
+    const hasFlipCardTitle = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.flipCardMaskTitleKeywords);
     const hasSignInMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.signInMaskKeywords);
     const hasSignInRewardMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.signInRewardMaskKeywords);
     const hasCouponMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.couponMaskKeywords, { matchMode: 'all' });
@@ -186,14 +190,8 @@ export class DouyinScheduler {
       page = 'TASK_HOME';
       subPage = 'MAIN_HOME';
     } else if (activity.indexOf('BulletContainerActivity') >= 0) {
-      // 任务列表上方的遮罩层会盖住“做任务赚金币”文本，这里视为 TASK_LIST 以便优先清遮罩
-      if (hasLotteryMask || this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListMarker)) {
-        page = 'TASK_LIST';
-        subPage = 'TASK_PANEL';
-      } else {
-        page = 'TASK_HOME';
-        subPage = 'OTHER';
-      }
+      page = 'TASK_LIST';
+      subPage = 'TASK_PANEL';
     } else if (activity.indexOf('ExcitingVideoActivity') >= 0) {
       page = 'AD_VIDEO';
       subPage = 'AD_FULLSCREEN';
@@ -204,6 +202,8 @@ export class DouyinScheduler {
 
     if (hasLotteryMask) {
       overlay = 'LOTTERY_MASK';
+    } else if (hasFlipCardAction && hasFlipCardTitle) {
+      overlay = 'FLIP_CARD_MASK';
     } else if (hasCouponMask) {
       overlay = 'COUPON_MASK';
     } else if (hasSignInRewardMask) {
@@ -231,15 +231,16 @@ export class DouyinScheduler {
 
     switch (state.page) {
       case 'TASK_HOME':
-        if (this.handleUnsupportedPage()) {
+        if (this.handleUnsupportedPage(state)) {
           return;
         }
-        this.openEarnCoinFromHome();
+        if (state.subPage === 'MAIN_HOME') {
+          this.openEarnCoinFromHome();
+        } else {
+          this.dispatch({ type: 'INC_LOST' });
+        }
         return;
       case 'TASK_LIST':
-        if (this.handleUnsupportedPage()) {
-          return;
-        }
         this.runTaskDispatcher(state);
         return;
       case 'AD_VIDEO':
@@ -262,6 +263,8 @@ export class DouyinScheduler {
 
     if (state.overlay === 'LOTTERY_MASK') {
       handled = this.handleLotteryMask();
+    } else if (state.overlay === 'FLIP_CARD_MASK') {
+      handled = this.handleFlipCardMask();
     } else if (state.overlay === 'COUPON_MASK') {
       handled = this.closeByOCRX();
     } else if (state.overlay === 'SIGN_IN_REWARD_MASK') {
@@ -345,14 +348,21 @@ export class DouyinScheduler {
   }
 
   private openEarnCoinFromHome() {
-    const earnCoinBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.earnCoinEntry);
+    if (this.isInHomeEntryCooldown()) {
+      return;
+    }
+
+    const earnCoinBtn = this.findHomeEarnCoinEntry();
     if (earnCoinBtn) {
+      console.log(`[DouyinScheduler] 点击首页入口: label=${earnCoinBtn.entry.label}`);
       click(earnCoinBtn.entry.bounds.centerX(), earnCoinBtn.entry.bounds.centerY());
+      this.homeEntryClickTs = Date.now();
       sleep(900);
       this.dispatch({ type: 'RESET_LOST' });
       return;
     }
-    this.openTaskList();
+    console.log('[DouyinScheduler] 首页未识别到"赚金币"入口，等待下一轮');
+    this.dispatch({ type: 'INC_LOST' });
   }
 
   private openTaskList() {
@@ -372,6 +382,9 @@ export class DouyinScheduler {
     this.dispatch({ type: 'RESET_LOST' });
 
     if (state.busy || state.currentTaskId) {
+      if (this.handleCurrentTaskPendingAction(state.currentTaskId)) {
+        return;
+      }
       return;
     }
 
@@ -498,6 +511,31 @@ export class DouyinScheduler {
     return true;
   }
 
+  private handleCurrentTaskPendingAction(taskId: string | null): boolean {
+    if (taskId !== 'flip_card') {
+      return false;
+    }
+    return this.tapFlipCardAdButton();
+  }
+
+  private handleFlipCardMask(): boolean {
+    const clicked = this.tapFlipCardAdButton();
+    if (clicked) {
+      return true;
+    }
+    return this.closeByOCRX();
+  }
+
+  private tapFlipCardAdButton(): boolean {
+    const btn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.flipCardActionKeywords);
+    if (!btn) {
+      return false;
+    }
+    click(btn.entry.bounds.centerX(), btn.entry.bounds.centerY());
+    sleep(700);
+    return true;
+  }
+
   private isUnsupportedTaskEntry(label: string): boolean {
     const normalized = String(label || '').toLowerCase();
     const keywords = Array.isArray(DOUYIN_UI_LEXICON.unsupportedTaskKeywords)
@@ -512,13 +550,66 @@ export class DouyinScheduler {
     return false;
   }
 
-  private handleUnsupportedPage(): boolean {
+  private handleUnsupportedPage(state: DouyinState): boolean {
+    // 仅在首页分支且不是 MAIN_HOME 时，才做“未适配页面”回退，避免在任务列表误判。
+    if (state.page !== 'TASK_HOME' || state.subPage === 'MAIN_HOME') {
+      return false;
+    }
     if (!this.ocrService.ocrContains(DOUYIN_UI_LEXICON.unsupportedPageKeywords)) {
       return false;
     }
+    console.log('[DouyinScheduler] 检测到未适配页面关键词，执行返回');
     back();
     sleep(700);
     return true;
+  }
+
+  private isInHomeEntryCooldown(): boolean {
+    if (this.homeEntryClickTs <= 0) {
+      return false;
+    }
+    return Date.now() - this.homeEntryClickTs < 4000;
+  }
+
+  private findHomeEarnCoinEntry(): OCRFindResult | null {
+    const entries = this.ocrService.detectEntries(true);
+    if (!entries.length) {
+      return null;
+    }
+
+    const h = Number((device as any)?.height || 0);
+    const lowerBoundY = h > 0 ? h * 0.4 : 0;
+
+    let best: OCREntry | null = null;
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (!this.isHomeEarnCoinLabel(entry.label)) {
+        continue;
+      }
+      if (lowerBoundY > 0 && entry.bounds.centerY() < lowerBoundY && best) {
+        continue;
+      }
+      if (!best || entry.bounds.centerY() > best.bounds.centerY()) {
+        best = entry;
+      }
+    }
+
+    if (!best) {
+      return null;
+    }
+
+    return { query: '赚金币', entry: best };
+  }
+
+  private isHomeEarnCoinLabel(label: string): boolean {
+    const text = String(label || '').replace(/\s/g, '');
+    if (text.indexOf('赚金币') < 0) {
+      return false;
+    }
+    if (text.indexOf('频道') >= 0 || text.indexOf('任务列表') >= 0 || text.indexOf('逛精选') >= 0) {
+      return false;
+    }
+    return text.length <= 12;
   }
 
   private getTaskById(taskId: string | null): DouyinTaskDefinition | null {

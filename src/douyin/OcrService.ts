@@ -76,7 +76,7 @@ export class OcrService {
     return labels;
   }
 
-  private detectEntries(useSlim: boolean): OCREntry[] {
+  public detectEntries(useSlim: boolean): OCREntry[] {
     if (!this.ensureCapturePermission()) {
       return [];
     }

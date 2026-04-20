@@ -49,6 +49,8 @@ export class DouyinScheduler {
   private overlayStuckCount = 0;
   private lastOverlay: DouyinOverlay = 'NONE';
   private homeEntryClickTs = 0;
+  private adPageEnterTs = 0;
+  private adLastBlindTapTs = 0;
 
   constructor(private readonly taskDefinitions: DouyinTaskDefinition[] = DOUYIN_TASKS) {
     this.setupStateMachine();
@@ -219,6 +221,11 @@ export class DouyinScheduler {
 
   private handleTick() {
     const state = this.state$.getValue();
+
+    if (state.page !== 'AD_VIDEO') {
+      this.adPageEnterTs = 0;
+      this.adLastBlindTapTs = 0;
+    }
 
     if (state.overlay !== 'NONE') {
       return;
@@ -424,7 +431,30 @@ export class DouyinScheduler {
   }
 
   private handleAdPage() {
+    const now = Date.now();
+    if (!this.adPageEnterTs) {
+      this.adPageEnterTs = now;
+    }
+
+    if (this.handleAdConfirmDialog()) {
+      return;
+    }
+
+    if (this.handleAdUiButtonsWithoutOCR()) {
+      return;
+    }
+
     const state = this.state$.getValue();
+    const hasTaskContext = !!state.currentTaskId;
+    const adStayMs = now - this.adPageEnterTs;
+    const firstBlindTapThreshold = hasTaskContext ? 22000 : 35000;
+
+    // 正常广告播放阶段优先等待，不提前点关闭；超过阈值才启用盲点关闭兜底。
+    const isAdPlaying = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adPlayingKeywords);
+    if (isAdPlaying && adStayMs < firstBlindTapThreshold) {
+      return;
+    }
+
     const currentTask = this.getTaskById(state.currentTaskId);
     if (currentTask) {
       const taskDone = this.ocrService.findByOCR(currentTask.completionKeywords);
@@ -446,17 +476,107 @@ export class DouyinScheduler {
       return;
     }
 
+    // 无任务上下文时，不主动点击广告关闭按钮，防止误触广告提前退出
+    if (!hasTaskContext) {
+      if (adStayMs >= firstBlindTapThreshold && now - this.adLastBlindTapTs > 12000) {
+        console.log('[DouyinScheduler] 广告页长时间停留，执行盲点关闭兜底');
+        this.tapTopRightCloseArea();
+        this.adLastBlindTapTs = now;
+        sleep(700);
+      }
+      return;
+    }
+
     const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adExitButtons);
     if (exitBtn) {
       click(exitBtn.entry.bounds.centerX(), exitBtn.entry.bounds.centerY());
       sleep(800);
       this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
       this.dispatch({ type: 'RESET_LOST' });
+      this.adLastBlindTapTs = now;
       return;
     }
 
-    this.dispatch({ type: 'INC_LOST' });
-    this.tryFallbackIfNeeded();
+    // OCR/text 都无法识别按钮时，按时序尝试右上角关闭，不再走 fallback 误触返回。
+    if (adStayMs >= firstBlindTapThreshold && now - this.adLastBlindTapTs > 10000) {
+      console.log('[DouyinScheduler] 广告按钮未识别，执行盲点关闭');
+      this.tapTopRightCloseArea();
+      this.adLastBlindTapTs = now;
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
+      sleep(700);
+      return;
+    }
+  }
+
+  private handleAdConfirmDialog(): boolean {
+    const continueUi = textContains('继续观看').findOnce() || textContains('再看').findOnce();
+    if (continueUi) {
+      continueUi.clickBounds(10, 10);
+      sleep(600);
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
+      this.dispatch({ type: 'RESET_LOST' });
+      return true;
+    }
+
+    const exitUi = textContains('坚持退出').findOnce() || textContains('换一个').findOnce();
+    if (exitUi) {
+      exitUi.clickBounds(10, 10);
+      sleep(600);
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
+      this.dispatch({ type: 'RESET_LOST' });
+      return true;
+    }
+
+    if (!this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adConfirmKeywords)) {
+      return false;
+    }
+
+    const continueBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmContinueKeywords);
+    if (continueBtn) {
+      click(continueBtn.entry.bounds.centerX(), continueBtn.entry.bounds.centerY());
+      sleep(600);
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
+      this.dispatch({ type: 'RESET_LOST' });
+      return true;
+    }
+
+    // 没有继续观看按钮时，兜底选择“坚持退出/换一个”防止卡死
+    const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmExitKeywords);
+    if (exitBtn) {
+      click(exitBtn.entry.bounds.centerX(), exitBtn.entry.bounds.centerY());
+      sleep(600);
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
+      this.dispatch({ type: 'RESET_LOST' });
+      return true;
+    }
+
+    return false;
+  }
+
+  private handleAdUiButtonsWithoutOCR(): boolean {
+    const rewardUi =
+      textContains('领取成功').findOnce() ||
+      textContains('领取奖励').findOnce() ||
+      textContains('开心收下').findOnce() ||
+      textContains('去提现').findOnce();
+    if (rewardUi) {
+      rewardUi.clickBounds(10, 10);
+      sleep(700);
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
+      this.dispatch({ type: 'RESET_LOST' });
+      return true;
+    }
+
+    const closeUi = textContains('关闭').findOnce() || textContains('跳过').findOnce();
+    if (closeUi) {
+      closeUi.clickBounds(10, 10);
+      sleep(700);
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
+      this.dispatch({ type: 'RESET_LOST' });
+      return true;
+    }
+
+    return false;
   }
 
   private pickVisibleTask(

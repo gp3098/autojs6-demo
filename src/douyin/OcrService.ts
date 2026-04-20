@@ -24,6 +24,9 @@ export interface OCRFindResult {
 
 export class OcrService {
   private hasScreenCapture = false;
+  private captureBackoffUntil = 0;
+  private lastCaptureErrorAt = 0;
+  private consecutiveCaptureFailures = 0;
 
   public ocrContains(query: OCRQuery, options: OCRFindOptions = {}): boolean {
     return this.findByOCR(query, options) != null;
@@ -81,12 +84,19 @@ export class OcrService {
       return [];
     }
 
-    const img = captureScreen();
-    if (!img) {
+    const now = Date.now();
+    if (now < this.captureBackoffUntil) {
       return [];
     }
 
+    let img: any = null;
     try {
+      img = captureScreen();
+      if (!img) {
+        return [];
+      }
+      this.consecutiveCaptureFailures = 0;
+
       const ocrAny = (global as any).ocr;
       const detector = ocrAny?.mlkit?.detect || ocrAny?.paddle?.detect;
       if (!detector) {
@@ -113,10 +123,21 @@ export class OcrService {
 
       return entries;
     } catch (error) {
-      console.error('OCR detect error', error);
+      this.consecutiveCaptureFailures += 1;
+      if (this.consecutiveCaptureFailures >= 3) {
+        this.hasScreenCapture = false;
+      }
+      this.captureBackoffUntil = Date.now() + 8000;
+      const nowTs = Date.now();
+      if (nowTs - this.lastCaptureErrorAt > 10000) {
+        console.error('OCR detect error', error);
+        this.lastCaptureErrorAt = nowTs;
+      }
       return [];
     } finally {
-      img.recycle();
+      if (img) {
+        img.recycle();
+      }
     }
   }
 
@@ -129,12 +150,15 @@ export class OcrService {
       const ok = requestScreenCapture(false);
       if (!ok) {
         toastLog('需要截图权限来进行 OCR');
+        this.captureBackoffUntil = Date.now() + 8000;
         return false;
       }
       this.hasScreenCapture = true;
+      this.consecutiveCaptureFailures = 0;
       return true;
     } catch (error) {
       console.error('requestScreenCapture error', error);
+      this.captureBackoffUntil = Date.now() + 8000;
       return false;
     }
   }

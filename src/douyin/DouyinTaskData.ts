@@ -32,6 +32,10 @@ export interface DouyinUiLexicon {
   unsupportedPageKeywords: OCRQuery;
   flipCardMaskTitleKeywords: OCRQuery;
   flipCardActionKeywords: OCRQuery;
+  adPlayingKeywords: OCRQuery;
+  adConfirmKeywords: OCRQuery;
+  adConfirmContinueKeywords: OCRQuery;
+  adConfirmExitKeywords: OCRQuery;
   commonPopups: OCRQuery;
 }
 
@@ -54,6 +58,10 @@ export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   unsupportedPageKeywords: ['逛精选频道赚金币', '精选频道'],
   flipCardMaskTitleKeywords: ['翻最后一张卡', '翻开加倍卡后将直接获得奖励'],
   flipCardActionKeywords: ['看广告翻开加倍卡', '看广告翻开', '看广告重翻'],
+  adPlayingKeywords: ['广告', '反馈'],
+  adConfirmKeywords: ['继续观看', '坚持退出', '再看', '翻十位卡', '翻百位卡', '翻千位卡'],
+  adConfirmContinueKeywords: ['继续观看', '再看'],
+  adConfirmExitKeywords: ['坚持退出', '换一个'],
   commonPopups: ['以后再说', '取消', '我知道了']
 };
 

@@ -24,6 +24,12 @@ export interface DouyinUiLexicon {
   lotteryDrawKeywords: OCRQuery;
   lotteryBusyKeywords: OCRQuery;
   closeKeywords: OCRQuery;
+  couponMaskKeywords: OCRQuery;
+  signInRewardMaskKeywords: OCRQuery;
+  collectGoldKeywords: OCRQuery;
+  collectingKeywords: OCRQuery;
+  unsupportedTaskKeywords: OCRQuery;
+  unsupportedPageKeywords: OCRQuery;
   commonPopups: OCRQuery;
 }
 
@@ -38,6 +44,12 @@ export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   lotteryDrawKeywords: ['立即抽奖'],
   lotteryBusyKeywords: ['活动太火爆了', '请稍后再试'],
   closeKeywords: ['X', '关闭'],
+  couponMaskKeywords: ['每日可兑', '元券待兑换', '平台券', '去看看'],
+  signInRewardMaskKeywords: ['看广告视频再得', '金币到账+'],
+  collectGoldKeywords: ['收金币'],
+  collectingKeywords: ['收集中'],
+  unsupportedTaskKeywords: ['逛精选频道赚金币'],
+  unsupportedPageKeywords: ['逛精选频道赚金币', '精选频道'],
   commonPopups: ['以后再说', '取消', '我知道了']
 };
 

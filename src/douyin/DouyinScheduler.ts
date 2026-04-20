@@ -4,9 +4,19 @@ import { DouyinTaskDefinition, DOUYIN_TASKS, DOUYIN_UI_LEXICON } from './DouyinT
 import { OcrService, OCRFindResult } from './OcrService';
 
 export type DouyinPage = 'UNKNOWN' | 'TASK_HOME' | 'TASK_LIST' | 'AD_VIDEO';
+export type DouyinOverlay =
+  | 'NONE'
+  | 'LOTTERY_MASK'
+  | 'COUPON_MASK'
+  | 'SIGN_IN_MASK'
+  | 'SIGN_IN_REWARD_MASK'
+  | 'GENERIC_POPUP';
+export type DouyinSubPage = 'NONE' | 'MAIN_HOME' | 'TASK_PANEL' | 'AD_FULLSCREEN' | 'OTHER';
 
 export interface DouyinState {
   page: DouyinPage;
+  overlay: DouyinOverlay;
+  subPage: DouyinSubPage;
   currentTaskId: string | null;
   finishedTaskRuns: { [taskId: string]: number };
   awaitingTaskReturn: boolean;
@@ -17,7 +27,7 @@ export interface DouyinState {
 }
 
 type DouyinAction =
-  | { type: 'PAGE_DETECTED'; page: DouyinPage }
+  | { type: 'PAGE_DETECTED'; page: DouyinPage; overlay: DouyinOverlay; subPage: DouyinSubPage }
   | { type: 'TASK_STARTED'; taskId: string }
   | { type: 'TASK_FINISHED' }
   | { type: 'SET_AWAITING_RETURN'; value: boolean }
@@ -35,6 +45,8 @@ export class DouyinScheduler {
   private readonly destroy$ = new Subject<void>();
   private readonly ocrService = new OcrService();
   private isDestroyed = false;
+  private overlayStuckCount = 0;
+  private lastOverlay: DouyinOverlay = 'NONE';
 
   constructor(private readonly taskDefinitions: DouyinTaskDefinition[] = DOUYIN_TASKS) {
     this.setupStateMachine();
@@ -81,7 +93,8 @@ export class DouyinScheduler {
   private setupLogger() {
     this.state$.pipe(takeUntil(this.destroy$)).subscribe(s => {
       console.log(
-        `[DouyinScheduler] page=${s.page} busy=${s.busy} currentTask=${s.currentTaskId || '-'} ` +
+        `[DouyinScheduler] page=${s.page} subPage=${s.subPage} overlay=${s.overlay} ` +
+          `busy=${s.busy} currentTask=${s.currentTaskId || '-'} ` +
           `lost=${s.lostCount} retry=${s.retryCount} awaiting=${s.awaitingTaskReturn}`
       );
     });
@@ -90,6 +103,8 @@ export class DouyinScheduler {
   private initialState(): DouyinState {
     return {
       page: 'UNKNOWN',
+      overlay: 'NONE',
+      subPage: 'NONE',
       currentTaskId: null,
       finishedTaskRuns: {},
       awaitingTaskReturn: false,
@@ -107,7 +122,7 @@ export class DouyinScheduler {
   private reducer(state: DouyinState, action: DouyinAction): DouyinState {
     switch (action.type) {
       case 'PAGE_DETECTED':
-        return { ...state, page: action.page, timestamp: Date.now() };
+        return { ...state, page: action.page, overlay: action.overlay, subPage: action.subPage, timestamp: Date.now() };
       case 'TASK_STARTED':
         return {
           ...state,
@@ -155,26 +170,59 @@ export class DouyinScheduler {
     const activity = String(currentActivity() || '');
 
     let page: DouyinPage = 'UNKNOWN';
+    let subPage: DouyinSubPage = 'OTHER';
+    let overlay: DouyinOverlay = 'NONE';
+
     const hasLotteryMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.lotteryMaskKeywords, { matchMode: 'all' });
+    const hasSignInMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.signInMaskKeywords);
+    const hasSignInRewardMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.signInRewardMaskKeywords);
+    const hasCouponMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.couponMaskKeywords, { matchMode: 'all' });
+    const hasGenericPopup =
+      text('以后再说').findOnce() != null ||
+      text('取消').findOnce() != null ||
+      this.ocrService.ocrContains(DOUYIN_UI_LEXICON.commonPopups);
 
     if (activity.indexOf(this.homeActivity) >= 0) {
       page = 'TASK_HOME';
+      subPage = 'MAIN_HOME';
     } else if (activity.indexOf('BulletContainerActivity') >= 0) {
       // 任务列表上方的遮罩层会盖住“做任务赚金币”文本，这里视为 TASK_LIST 以便优先清遮罩
       if (hasLotteryMask || this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListMarker)) {
         page = 'TASK_LIST';
+        subPage = 'TASK_PANEL';
       } else {
         page = 'TASK_HOME';
+        subPage = 'OTHER';
       }
     } else if (activity.indexOf('ExcitingVideoActivity') >= 0) {
       page = 'AD_VIDEO';
+      subPage = 'AD_FULLSCREEN';
+    } else {
+      page = 'UNKNOWN';
+      subPage = 'OTHER';
     }
 
-    this.dispatch({ type: 'PAGE_DETECTED', page });
+    if (hasLotteryMask) {
+      overlay = 'LOTTERY_MASK';
+    } else if (hasCouponMask) {
+      overlay = 'COUPON_MASK';
+    } else if (hasSignInRewardMask) {
+      overlay = 'SIGN_IN_REWARD_MASK';
+    } else if (hasSignInMask && (page === 'TASK_HOME' || page === 'TASK_LIST')) {
+      overlay = 'SIGN_IN_MASK';
+    } else if (hasGenericPopup) {
+      overlay = 'GENERIC_POPUP';
+    }
+
+    this.dispatch({ type: 'PAGE_DETECTED', page, overlay, subPage });
   }
 
   private handleTick() {
     const state = this.state$.getValue();
+
+    if (state.overlay !== 'NONE') {
+      return;
+    }
 
     if (state.awaitingTaskReturn && state.page === 'TASK_LIST') {
       this.dispatch({ type: 'TASK_FINISHED' });
@@ -183,9 +231,15 @@ export class DouyinScheduler {
 
     switch (state.page) {
       case 'TASK_HOME':
+        if (this.handleUnsupportedPage()) {
+          return;
+        }
         this.openEarnCoinFromHome();
         return;
       case 'TASK_LIST':
+        if (this.handleUnsupportedPage()) {
+          return;
+        }
         this.runTaskDispatcher(state);
         return;
       case 'AD_VIDEO':
@@ -201,17 +255,29 @@ export class DouyinScheduler {
 
   private handleGlobalPopups() {
     const currentPage = this.state$.getValue().page;
+    const state = this.state$.getValue();
     const shouldHandleSignInMask = currentPage === 'TASK_HOME' || currentPage === 'TASK_LIST';
 
-    if (this.handleLotteryMask()) {
+    let handled = false;
+
+    if (state.overlay === 'LOTTERY_MASK') {
+      handled = this.handleLotteryMask();
+    } else if (state.overlay === 'COUPON_MASK') {
+      handled = this.closeByOCRX();
+    } else if (state.overlay === 'SIGN_IN_REWARD_MASK') {
+      handled = this.closeByOCRX();
+    }
+    if (handled) {
+      this.resetOverlayStuckCounter(state.overlay);
       return;
     }
 
-    if (shouldHandleSignInMask) {
+    if (state.overlay === 'SIGN_IN_MASK' && shouldHandleSignInMask) {
       const signInBtn = textContains('立即签到').findOnce() || textContains('签到领金币').findOnce();
       if (signInBtn) {
         signInBtn.clickBounds(10, 10);
         sleep(500);
+        this.resetOverlayStuckCounter(state.overlay);
         return;
       }
 
@@ -219,20 +285,31 @@ export class DouyinScheduler {
       if (signMask) {
         click(signMask.entry.bounds.centerX(), signMask.entry.bounds.centerY());
         sleep(500);
+        this.resetOverlayStuckCounter(state.overlay);
         return;
       }
+    }
+
+    if (state.overlay !== 'GENERIC_POPUP') {
+      this.bumpOverlayStuckCounter(state.overlay);
+      return;
     }
 
     const close = text('以后再说').findOnce() || text('取消').findOnce();
     if (close) {
       close.click();
+      this.resetOverlayStuckCounter(state.overlay);
       return;
     }
 
     const popupOCR = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.commonPopups);
     if (popupOCR) {
       click(popupOCR.entry.bounds.centerX(), popupOCR.entry.bounds.centerY());
+      this.resetOverlayStuckCounter(state.overlay);
+      return;
     }
+
+    this.bumpOverlayStuckCounter(state.overlay);
   }
 
   private handleLotteryMask(): boolean {
@@ -247,12 +324,7 @@ export class DouyinScheduler {
 
     const isBusy = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.lotteryBusyKeywords);
     if (isBusy) {
-      const closeBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.closeKeywords);
-      if (closeBtn) {
-        click(closeBtn.entry.bounds.centerX(), closeBtn.entry.bounds.centerY());
-        sleep(500);
-        return true;
-      }
+      return this.closeByOCRX();
     }
 
     const drawBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.lotteryDrawKeywords);
@@ -303,6 +375,10 @@ export class DouyinScheduler {
       return;
     }
 
+    if (this.handleCollectGoldAction()) {
+      return;
+    }
+
     const next = this.pickVisibleTask(state.finishedTaskRuns);
     if (!next) {
       if (!this.hasPendingTasks(state.finishedTaskRuns)) {
@@ -318,6 +394,10 @@ export class DouyinScheduler {
     }
 
     const { task: nextTask, target } = next;
+    if (this.isUnsupportedTaskEntry(target.entry.label)) {
+      this.scrollTaskList();
+      return;
+    }
     click(target.entry.bounds.centerX(), target.entry.bounds.centerY());
     sleep(900);
 
@@ -402,6 +482,45 @@ export class DouyinScheduler {
     return false;
   }
 
+  private handleCollectGoldAction(): boolean {
+    const collecting = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.collectingKeywords);
+    if (collecting) {
+      return false;
+    }
+
+    const collectBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.collectGoldKeywords);
+    if (!collectBtn) {
+      return false;
+    }
+
+    click(collectBtn.entry.bounds.centerX(), collectBtn.entry.bounds.centerY());
+    sleep(600);
+    return true;
+  }
+
+  private isUnsupportedTaskEntry(label: string): boolean {
+    const normalized = String(label || '').toLowerCase();
+    const keywords = Array.isArray(DOUYIN_UI_LEXICON.unsupportedTaskKeywords)
+      ? DOUYIN_UI_LEXICON.unsupportedTaskKeywords
+      : [DOUYIN_UI_LEXICON.unsupportedTaskKeywords];
+    for (let i = 0; i < keywords.length; i++) {
+      const key = String(keywords[i] || '').trim().toLowerCase();
+      if (key && normalized.indexOf(key) >= 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private handleUnsupportedPage(): boolean {
+    if (!this.ocrService.ocrContains(DOUYIN_UI_LEXICON.unsupportedPageKeywords)) {
+      return false;
+    }
+    back();
+    sleep(700);
+    return true;
+  }
+
   private getTaskById(taskId: string | null): DouyinTaskDefinition | null {
     if (!taskId) {
       return null;
@@ -442,5 +561,58 @@ export class DouyinScheduler {
     this.dispatch({ type: 'RESET_LOST' });
     this.dispatch({ type: 'SET_BUSY', value: false });
     this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
+  }
+
+  private closeByOCRX(): boolean {
+    const closeBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.closeKeywords);
+    if (closeBtn) {
+      click(closeBtn.entry.bounds.centerX(), closeBtn.entry.bounds.centerY());
+      sleep(500);
+      return true;
+    }
+    return this.tapTopRightCloseArea();
+  }
+
+  private tapTopRightCloseArea(): boolean {
+    const w = Number((device as any)?.width || 0);
+    const h = Number((device as any)?.height || 0);
+    if (!w || !h) {
+      return false;
+    }
+    const x = Math.floor(w * 0.93);
+    const y = Math.floor(h * 0.08);
+    click(x, y);
+    sleep(350);
+    return true;
+  }
+
+  private resetOverlayStuckCounter(currentOverlay: DouyinOverlay) {
+    this.lastOverlay = currentOverlay;
+    this.overlayStuckCount = 0;
+  }
+
+  private bumpOverlayStuckCounter(currentOverlay: DouyinOverlay) {
+    if (currentOverlay === 'NONE') {
+      this.overlayStuckCount = 0;
+      this.lastOverlay = 'NONE';
+      return;
+    }
+
+    if (this.lastOverlay === currentOverlay) {
+      this.overlayStuckCount += 1;
+    } else {
+      this.lastOverlay = currentOverlay;
+      this.overlayStuckCount = 1;
+    }
+
+    if (this.overlayStuckCount >= 5) {
+      this.closeByOCRX();
+    }
+
+    if (this.overlayStuckCount >= 10) {
+      back();
+      sleep(600);
+      this.overlayStuckCount = 0;
+    }
   }
 }

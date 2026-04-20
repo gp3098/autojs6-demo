@@ -3,6 +3,10 @@ import { AdState } from './Enums';
 export interface IAppTaskStrategy {
   appPackage: string;
   appName: string;
+
+  // 可选：策略自带完整引擎（任务调度器 + 状态机）时，直接由策略接管执行
+  runWithCustomEngine?(): void;
+  stopCustomEngine?(): void;
   
   // 必须实现：全局弹窗处理（包含升级、青少年模式、签到等）
   // @returns 是否成功拦截并处理了某个弹窗

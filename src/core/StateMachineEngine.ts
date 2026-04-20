@@ -15,6 +15,11 @@ export class StateMachineEngine {
   }
 
   public start() {
+    if (this.strategy.runWithCustomEngine) {
+      this.strategy.runWithCustomEngine();
+      return;
+    }
+
     toastLog(`开始运行 [${this.strategy.appName}]`);
     auto.waitFor();
     this.globalState$.next(GlobalState.APP_LAUNCHING);
@@ -28,6 +33,9 @@ export class StateMachineEngine {
   }
 
   public stop() {
+    if (this.strategy.stopCustomEngine) {
+      this.strategy.stopCustomEngine();
+    }
     this.isDestroyed = true;
     this.destroy$.next();
     this.destroy$.complete();

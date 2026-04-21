@@ -551,7 +551,7 @@ export class DouyinScheduler {
       const label = exitBtn.entry.label;
       const isTimer = (/\d+[sS]/.test(label) || /\d+秒/.test(label) || label.indexOf('后可领') >= 0);
       const isSuccess = /领取成|领取戌/.test(label);
-      
+
       // 过滤掉纯倒计时的伪退出按钮（例如 "09s后可领奖励 X"）。但如果包含成功字眼则依然可以提前关闭
       if (!isTimer || isSuccess) {
         click(exitBtn.entry.bounds.centerX(), exitBtn.entry.bounds.centerY());
@@ -601,8 +601,44 @@ export class DouyinScheduler {
   }
 
   private handleAdConfirmDialog(): boolean {
-    console.log('handleAdConfirmDialog start')
-    const continueUi = textContains('继续观看').findOnce() || textContains('再看').findOnce();
+    console.log('handleAdConfirmDialog start');
+
+    // 解析屏幕上的金币数量以决定策略
+    let coinAmount = -1;
+    const entries = this.ocrService.detectEntries(true);
+    for (let i = 0; i < entries.length; i++) {
+      const label = entries[i].label;
+      // 过滤掉长文本和带有倒计时的伪数字
+      if (label.length < 15 && !/\d+[sS]/.test(label) && !/\d+秒/.test(label) && /\d{2,}/.test(label)) {
+        const nums = label.match(/\d+/g);
+        if (nums) {
+          nums.forEach(n => {
+            const val = parseInt(n, 10);
+            if (val > coinAmount && val <= 10000) {
+              coinAmount = Math.max(coinAmount, val);
+            }
+          });
+        }
+      }
+    }
+    console.log(`[DouyinScheduler] 二次确认弹窗检测到当前收益数值评估: ${coinAmount}`);
+
+    const shouldExit = coinAmount > 0 && coinAmount < 100;
+
+    if (shouldExit) {
+      console.log('[DouyinScheduler] 收益小于100，选择坚持退出');
+      const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmExitKeywords);
+      if (exitBtn) {
+        click(exitBtn.entry.bounds.centerX(), exitBtn.entry.bounds.centerY());
+        sleep(600);
+        this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
+        this.dispatch({ type: 'RESET_LOST' });
+        return true;
+      }
+    }
+
+    // 常规节点寻找继续观看
+    const continueUi = textContains('继续观看').findOnce() || textContains('再看').findOnce() || textContains('继续领奖励').findOnce();
     if (continueUi) {
       continueUi.clickBounds(10, 10);
       sleep(600);
@@ -611,21 +647,11 @@ export class DouyinScheduler {
       return true;
     }
 
-    const exitUi = textContains('坚持退出').findOnce() || textContains('换一个').findOnce();
-    if (exitUi) {
-      exitUi.clickBounds(10, 10);
-      sleep(600);
-      this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
-      this.dispatch({ type: 'RESET_LOST' });
-      return true;
-    }
-
     if (!this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adConfirmKeywords)) {
-      console.log('handleAdConfirmDialog: adConfirmKeywords not found', this.ocrService.detectLabels(), DOUYIN_UI_LEXICON.adConfirmKeywords);
       return false;
     }
 
-    const exactRewardBtn = this.ocrService.findByOCR('继续领奖励', { exactMatch: true });
+    const exactRewardBtn = this.ocrService.findByOCR(['继续领奖励', '继续領奖励'], { exactMatch: true });
     if (exactRewardBtn) {
       click(exactRewardBtn.entry.bounds.centerX(), exactRewardBtn.entry.bounds.centerY());
       sleep(600);
@@ -634,22 +660,33 @@ export class DouyinScheduler {
       return true;
     }
 
-    const continueBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmContinueKeywords);
-    if (continueBtn) {
-      console.log('handleAdConfirmDialog: continueBtn', this.ocrService.detectLabels(), continueBtn);
-      click(continueBtn.entry.bounds.centerX(), continueBtn.entry.bounds.centerY());
+    // 针对继续观看做模糊匹配兜底，但强制过滤掉大于8个字符的长标题（如“再看一个视频继续领奖励”）防止误触标题。
+    let fallbackBtn: import('./OcrService').OCREntry | null = null;
+    const continueKeywords = DOUYIN_UI_LEXICON.adConfirmContinueKeywords;
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        if (entry.label.length >= 8) continue; // 判定为标题或长文案，跳过
+        for (let j = 0; j < continueKeywords.length; j++) {
+            if (entry.label.includes(continueKeywords[j])) {
+                fallbackBtn = entry;
+                break;
+            }
+        }
+        if (fallbackBtn) break;
+    }
+
+    if (fallbackBtn) {
+      click(fallbackBtn.bounds.centerX(), fallbackBtn.bounds.centerY());
       sleep(600);
       this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
       this.dispatch({ type: 'RESET_LOST' });
       return true;
     }
 
-    // (exactRewardBtn is now evaluated earlier)
-
-    // 没有继续观看按钮时，兜底选择“坚持退出/换一个”防止卡死
-    const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmExitKeywords);
-    if (exitBtn) {
-      click(exitBtn.entry.bounds.centerX(), exitBtn.entry.bounds.centerY());
+    // 默认兜底防止卡死（如果应该拒绝但没找到退出按钮，或者根本没找到继续观看按钮）
+    const exitFallback = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmExitKeywords);
+    if (exitFallback) {
+      click(exitFallback.entry.bounds.centerX(), exitFallback.entry.bounds.centerY());
       sleep(600);
       this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
       this.dispatch({ type: 'RESET_LOST' });

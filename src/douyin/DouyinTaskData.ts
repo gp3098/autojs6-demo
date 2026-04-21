@@ -69,9 +69,9 @@ export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   flipCardMaskTitleKeywords: ['翻最后一张卡', '翻开加倍卡后将直接获得奖励'],
   flipCardActionKeywords: ['看广告翻开加倍卡', '看广告翻开', '看广告重翻'],
   adPlayingKeywords: ['广告', '反馈'],
-  adConfirmKeywords: ['继续观看', '坚持退出', '再看', '翻十位卡', '翻百位卡', '翻千位卡'],
-  adConfirmContinueKeywords: ['继续观看', '再看'],
-  adConfirmExitKeywords: ['坚持退出', '换一个'],
+  adConfirmKeywords: ['继续观看', '坚持退出', '再看', '翻十位卡', '翻百位卡', '翻千位卡', '继续领奖励', '坚特退出'],
+  adConfirmContinueKeywords: ['继续观看', '再看', '继续领奖励', '再着'],
+  adConfirmExitKeywords: ['坚持退出', '换一个', '坚特退出'],
   commonPopups: ['以后再说', '取消', '我知道了']
 };
 

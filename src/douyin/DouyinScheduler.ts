@@ -525,12 +525,6 @@ export class DouyinScheduler {
     const firstBlindTapThreshold = hasTaskContext ? 32000 : 45000;
     const forceCloseWhilePlayingMs = hasTaskContext ? 65000 : 80000;
 
-    // 正常广告播放阶段优先等待，不提前点关闭；超过阈值才启用盲点关闭兜底。
-    const isAdPlaying = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adPlayingKeywords);
-    if (isAdPlaying && adStayMs < forceCloseWhilePlayingMs) {
-      return;
-    }
-
     const currentTask = this.getTaskById(state.currentTaskId);
     if (currentTask) {
       const taskDone = this.ocrService.findByOCR(currentTask.completionKeywords);
@@ -552,7 +546,33 @@ export class DouyinScheduler {
       return;
     }
 
-    // 无任务上下文时，不主动点击广告关闭按钮，防止误触广告提前退出
+    const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adExitButtons);
+    if (exitBtn) {
+      const label = exitBtn.entry.label;
+      const isTimer = (/\d+[sS]/.test(label) || /\d+秒/.test(label) || label.indexOf('后可领') >= 0);
+      const isSuccess = /领取成|领取戌/.test(label);
+      
+      // 过滤掉纯倒计时的伪退出按钮（例如 "09s后可领奖励 X"）。但如果包含成功字眼则依然可以提前关闭
+      if (!isTimer || isSuccess) {
+        click(exitBtn.entry.bounds.centerX(), exitBtn.entry.bounds.centerY());
+        sleep(800);
+        this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
+        this.dispatch({ type: 'RESET_LOST' });
+        this.adLastBlindTapTs = now;
+        return;
+      } else {
+        console.log('[DouyinScheduler] Ignore fake exit button with countdown:', label);
+      }
+    }
+
+    // 以上有效按钮均未被检测到的情况下，检查是否处于正常的广告播放阶段。
+    // （有的广告播放完依然会在界面滞留“广告”水印，通过将有效按钮排在首位，可避免该水印卡死流程）
+    const isAdPlaying = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adPlayingKeywords);
+    if (isAdPlaying && adStayMs < forceCloseWhilePlayingMs) {
+      return;
+    }
+
+    // 无任务上下文时，由于不再阻挡有效的关闭按钮识别，其余盲点功能视情况提前返回
     if (!hasTaskContext) {
       /*
       // FIXME: 暂时关闭盲点功能
@@ -563,16 +583,6 @@ export class DouyinScheduler {
         sleep(700);
       }
       */
-      return;
-    }
-
-    const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adExitButtons);
-    if (exitBtn) {
-      click(exitBtn.entry.bounds.centerX(), exitBtn.entry.bounds.centerY());
-      sleep(800);
-      this.dispatch({ type: 'SET_AWAITING_RETURN', value: true });
-      this.dispatch({ type: 'RESET_LOST' });
-      this.adLastBlindTapTs = now;
       return;
     }
 

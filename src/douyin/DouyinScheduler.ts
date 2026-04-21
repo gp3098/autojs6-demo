@@ -503,10 +503,13 @@ export class DouyinScheduler {
       return;
     }
 
+    // FIXME: 暂时关闭盲点功能，改用截图，直到修正截图功能为止
+    /*
     // 二次确认框在图片层时，常规 OCR/text 可能无法命中；awaiting=true 时优先走专用盲点。
     if (state.awaitingTaskReturn && this.tryTapAdConfirmBlindArea(now)) {
       return;
     }
+    */
 
     if (this.handleAdUiButtonsWithoutOCR()) {
       return;
@@ -546,12 +549,15 @@ export class DouyinScheduler {
 
     // 无任务上下文时，不主动点击广告关闭按钮，防止误触广告提前退出
     if (!hasTaskContext) {
+      /*
+      // FIXME: 暂时关闭盲点功能
       if (adStayMs >= firstBlindTapThreshold && now - this.adLastBlindTapTs > 15000) {
         console.log('[DouyinScheduler] 广告页长时间停留，执行盲点关闭兜底');
         this.tapTopRightCloseArea();
         this.adLastBlindTapTs = now;
         sleep(700);
       }
+      */
       return;
     }
 
@@ -566,6 +572,8 @@ export class DouyinScheduler {
     }
 
     // OCR/text 都无法识别按钮时，按时序尝试右上角关闭，不再走 fallback 误触返回。
+    /*
+    // FIXME: 暂时关闭盲点功能
     if (adStayMs >= firstBlindTapThreshold && now - this.adLastBlindTapTs > 15000) {
       console.log('[DouyinScheduler] 广告按钮未识别，执行盲点关闭');
       this.tapTopRightCloseArea();
@@ -574,6 +582,7 @@ export class DouyinScheduler {
       sleep(700);
       return;
     }
+    */
   }
 
   private handleAdConfirmDialog(): boolean {
@@ -608,6 +617,15 @@ export class DouyinScheduler {
       return true;
     }
 
+    const exactRewardBtn = this.ocrService.findByOCR('继续领奖励', { exactMatch: true });
+    if (exactRewardBtn) {
+      click(exactRewardBtn.entry.bounds.centerX(), exactRewardBtn.entry.bounds.centerY());
+      sleep(600);
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
+      this.dispatch({ type: 'RESET_LOST' });
+      return true;
+    }
+
     // 没有继续观看按钮时，兜底选择“坚持退出/换一个”防止卡死
     const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmExitKeywords);
     if (exitBtn) {
@@ -622,6 +640,9 @@ export class DouyinScheduler {
   }
 
   private tryTapAdConfirmBlindArea(now: number): boolean {
+    // FIXME: 暂时关闭盲点功能，改用截图，直到修正截图功能为止
+    return false;
+    /*
     if (now - this.adConfirmBlindTapTs < 3500) {
       return false;
     }
@@ -634,6 +655,7 @@ export class DouyinScheduler {
     sleep(500);
     this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
     return true;
+    */
   }
 
   private handleAdUiButtonsWithoutOCR(): boolean {
@@ -917,6 +939,9 @@ export class DouyinScheduler {
   }
 
   private tapTopRightCloseArea(): boolean {
+    // FIXME: 暂时关闭盲点功能，改用截图，直到修正截图功能为止
+    return false;
+    /*
     const w = Number((device as any)?.width || 0);
     const h = Number((device as any)?.height || 0);
     if (!w || !h) {
@@ -927,6 +952,7 @@ export class DouyinScheduler {
     click(x, y);
     sleep(350);
     return true;
+    */
   }
 
   private resetOverlayStuckCounter(currentOverlay: DouyinOverlay) {

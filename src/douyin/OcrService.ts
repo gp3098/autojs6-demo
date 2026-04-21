@@ -5,6 +5,7 @@ export interface OCRFindOptions {
   matchMode?: OCRMatchMode;
   useSlim?: boolean;
   caseSensitive?: boolean;
+  exactMatch?: boolean;
 }
 
 export interface OCRBoundsLike {
@@ -29,6 +30,7 @@ export class OcrService {
   private consecutiveCaptureFailures = 0;
   private inTick = false;
   private tickCacheBySlim: { [key: string]: OCREntry[] | null } = {};
+  private lastStatusLogAt = 0;
 
   public beginTick() {
     this.inTick = true;
@@ -45,7 +47,7 @@ export class OcrService {
   }
 
   public findByOCR(query: OCRQuery, options: OCRFindOptions = {}): OCRFindResult | null {
-    const { matchMode = 'any', useSlim = true, caseSensitive = false } = options;
+    const { matchMode = 'any', useSlim = true, caseSensitive = false, exactMatch = false } = options;
     const entries = this.detectEntries(useSlim);
     if (!entries.length) {
       return null;
@@ -60,7 +62,7 @@ export class OcrService {
       let firstMatch: OCRFindResult | null = null;
       for (let i = 0; i < keywords.length; i++) {
         const q = keywords[i];
-        const hit = this.findFirstEntry(entries, q, caseSensitive);
+        const hit = this.findFirstEntry(entries, q, caseSensitive, exactMatch);
         if (!hit) {
           return null;
         }
@@ -73,7 +75,7 @@ export class OcrService {
 
     for (let i = 0; i < keywords.length; i++) {
       const q = keywords[i];
-      const hit = this.findFirstEntry(entries, q, caseSensitive);
+      const hit = this.findFirstEntry(entries, q, caseSensitive, exactMatch);
       if (hit) {
         return { query: q, entry: hit };
       }
@@ -146,16 +148,21 @@ export class OcrService {
         entries.push({ label, bounds });
       }
 
+      if (now - this.lastStatusLogAt > 4000) {
+        console.log(`[OcrService] Screen captured successfully, detected ${entries.length} text entries.`);
+        this.lastStatusLogAt = now;
+      }
+
       return entries;
     } catch (error) {
       this.consecutiveCaptureFailures += 1;
-      if (this.consecutiveCaptureFailures >= 3) {
-        this.hasScreenCapture = false;
-      }
-      this.captureBackoffUntil = Date.now() + 8000;
+      // 截图出错（如横竖屏切换），立即重置权限以便重新申请正确方向的截图
+      this.hasScreenCapture = false;
+      // 退避时间缩短，确保能快速从横竖屏切换中恢复
+      this.captureBackoffUntil = Date.now() + 1500;
       const nowTs = Date.now();
-      if (nowTs - this.lastCaptureErrorAt > 10000) {
-        console.error('OCR detect error', error);
+      if (nowTs - this.lastCaptureErrorAt > 4000) {
+        console.error(`[OcrService] Capture screen error (consecutive ${this.consecutiveCaptureFailures} times):`, error);
         this.lastCaptureErrorAt = nowTs;
       }
       return [];
@@ -172,10 +179,15 @@ export class OcrService {
     }
 
     try {
-      const ok = requestScreenCapture(false);
+      // 根据当前宽高决定申请横屏还是竖屏截图
+      const w = Number((device as any)?.width || 0);
+      const h = Number((device as any)?.height || 0);
+      const isLandscape = w > h;
+      
+      const ok = requestScreenCapture(isLandscape);
       if (!ok) {
         toastLog('需要截图权限来进行 OCR');
-        this.captureBackoffUntil = Date.now() + 8000;
+        this.captureBackoffUntil = Date.now() + 4000;
         return false;
       }
       this.hasScreenCapture = true;
@@ -203,12 +215,18 @@ export class OcrService {
     return out;
   }
 
-  private findFirstEntry(entries: OCREntry[], query: string, caseSensitive: boolean): OCREntry | null {
+  private findFirstEntry(entries: OCREntry[], query: string, caseSensitive: boolean, exactMatch: boolean): OCREntry | null {
     for (let i = 0; i < entries.length; i++) {
       const rawLabel = entries[i].label;
       const label = caseSensitive ? rawLabel : rawLabel.toLowerCase();
-      if (label.indexOf(query) >= 0) {
-        return entries[i];
+      if (exactMatch) {
+        if (label === query) {
+          return entries[i];
+        }
+      } else {
+        if (label.indexOf(query) >= 0) {
+          return entries[i];
+        }
       }
     }
     return null;

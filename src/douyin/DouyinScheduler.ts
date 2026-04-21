@@ -710,7 +710,8 @@ export class DouyinScheduler {
     const entries = this.ocrService.detectEntries(true);
     const doneEntries: OCREntry[] = [];
     for (let i = 0; i < entries.length; i++) {
-      if (entries[i].label.indexOf('已完成') >= 0) {
+      const label = entries[i].label;
+      if (label.indexOf('已完成') >= 0 || label.indexOf('明天来') >= 0 || /\d{2}:\d{2}/.test(label)) {
         doneEntries.push(entries[i]);
       }
     }
@@ -824,6 +825,21 @@ export class DouyinScheduler {
     if (!hit) {
       return false;
     }
+
+    const entries = this.ocrService.detectEntries(true);
+    const lockedEntries: OCREntry[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      const label = entries[i].label;
+      if (label.indexOf('已完成') >= 0 || label.indexOf('明天来') >= 0 || /\d{2}:\d{2}/.test(label)) {
+        lockedEntries.push(entries[i]);
+      }
+    }
+
+    if (this.isTaskDoneByRow(hit.entry, lockedEntries)) {
+      console.log(`[DouyinScheduler] 发现任务处于冷却或锁定状态，拒绝点击 label=${hit.entry.label}`);
+      return false;
+    }
+
     click(hit.entry.bounds.centerX(), hit.entry.bounds.centerY());
     console.log(`[DouyinScheduler] 点击关键词按钮 label=${hit.entry.label} query=${hit.query}`);
     sleep(700);

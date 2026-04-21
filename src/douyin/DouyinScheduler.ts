@@ -31,6 +31,7 @@ type DouyinAction =
   | { type: 'PAGE_DETECTED'; page: DouyinPage; overlay: DouyinOverlay; subPage: DouyinSubPage }
   | { type: 'TASK_STARTED'; taskId: string }
   | { type: 'TASK_FINISHED' }
+  | { type: 'TASK_ABORT' }
   | { type: 'SET_AWAITING_RETURN'; value: boolean }
   | { type: 'SET_BUSY'; value: boolean }
   | { type: 'INC_RETRY' }
@@ -51,6 +52,8 @@ export class DouyinScheduler {
   private homeEntryClickTs = 0;
   private adPageEnterTs = 0;
   private adLastBlindTapTs = 0;
+  private busyTaskStuckLoops = 0;
+  private busyTaskId: string | null = null;
 
   constructor(private readonly taskDefinitions: DouyinTaskDefinition[] = DOUYIN_TASKS) {
     this.setupStateMachine();
@@ -155,6 +158,14 @@ export class DouyinScheduler {
           timestamp: Date.now()
         };
       }
+      case 'TASK_ABORT':
+        return {
+          ...state,
+          currentTaskId: null,
+          busy: false,
+          awaitingTaskReturn: false,
+          timestamp: Date.now()
+        };
       case 'SET_AWAITING_RETURN':
         return { ...state, awaitingTaskReturn: action.value, timestamp: Date.now() };
       case 'SET_BUSY':
@@ -389,11 +400,33 @@ export class DouyinScheduler {
     this.dispatch({ type: 'RESET_LOST' });
 
     if (state.busy || state.currentTaskId) {
-      if (this.handleCurrentTaskPendingAction(state.currentTaskId)) {
+      const progressed = this.handleCurrentTaskPendingAction(state.currentTaskId);
+      if (progressed) {
+        this.busyTaskStuckLoops = 0;
+        this.busyTaskId = state.currentTaskId;
+        console.log(`[DouyinScheduler] busy任务推进成功 task=${state.currentTaskId || '-'}`);
         return;
+      }
+
+      if (this.busyTaskId === state.currentTaskId) {
+        this.busyTaskStuckLoops += 1;
+      } else {
+        this.busyTaskId = state.currentTaskId;
+        this.busyTaskStuckLoops = 1;
+      }
+      console.log(
+        `[DouyinScheduler] busy任务未推进 task=${state.currentTaskId || '-'} loops=${this.busyTaskStuckLoops}`
+      );
+      if (this.busyTaskStuckLoops >= 10) {
+        console.log('[DouyinScheduler] busy任务卡住超时，执行TASK_ABORT');
+        this.busyTaskStuckLoops = 0;
+        this.busyTaskId = null;
+        this.dispatch({ type: 'TASK_ABORT' });
       }
       return;
     }
+    this.busyTaskStuckLoops = 0;
+    this.busyTaskId = null;
 
     if (this.handleCollectGoldAction()) {
       return;
@@ -447,11 +480,12 @@ export class DouyinScheduler {
     const state = this.state$.getValue();
     const hasTaskContext = !!state.currentTaskId;
     const adStayMs = now - this.adPageEnterTs;
-    const firstBlindTapThreshold = hasTaskContext ? 22000 : 35000;
+    const firstBlindTapThreshold = hasTaskContext ? 32000 : 45000;
+    const forceCloseWhilePlayingMs = hasTaskContext ? 65000 : 80000;
 
     // 正常广告播放阶段优先等待，不提前点关闭；超过阈值才启用盲点关闭兜底。
     const isAdPlaying = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adPlayingKeywords);
-    if (isAdPlaying && adStayMs < firstBlindTapThreshold) {
+    if (isAdPlaying && adStayMs < forceCloseWhilePlayingMs) {
       return;
     }
 
@@ -478,7 +512,7 @@ export class DouyinScheduler {
 
     // 无任务上下文时，不主动点击广告关闭按钮，防止误触广告提前退出
     if (!hasTaskContext) {
-      if (adStayMs >= firstBlindTapThreshold && now - this.adLastBlindTapTs > 12000) {
+      if (adStayMs >= firstBlindTapThreshold && now - this.adLastBlindTapTs > 15000) {
         console.log('[DouyinScheduler] 广告页长时间停留，执行盲点关闭兜底');
         this.tapTopRightCloseArea();
         this.adLastBlindTapTs = now;
@@ -498,7 +532,7 @@ export class DouyinScheduler {
     }
 
     // OCR/text 都无法识别按钮时，按时序尝试右上角关闭，不再走 fallback 误触返回。
-    if (adStayMs >= firstBlindTapThreshold && now - this.adLastBlindTapTs > 10000) {
+    if (adStayMs >= firstBlindTapThreshold && now - this.adLastBlindTapTs > 15000) {
       console.log('[DouyinScheduler] 广告按钮未识别，执行盲点关闭');
       this.tapTopRightCloseArea();
       this.adLastBlindTapTs = now;
@@ -632,10 +666,19 @@ export class DouyinScheduler {
   }
 
   private handleCurrentTaskPendingAction(taskId: string | null): boolean {
-    if (taskId !== 'flip_card') {
+    if (!taskId) {
       return false;
     }
-    return this.tapFlipCardAdButton();
+    if (taskId === 'flip_card') {
+      return this.tapFlipCardAdButton();
+    }
+    if (taskId === 'split_red_packet') {
+      return this.tapByKeywords(['看视频拆开红包', '看视频拆红包', '拆开红包']);
+    }
+    if (taskId === 'watch_video') {
+      return this.tapByKeywords(['看视频赚金币', '看广告视频']);
+    }
+    return false;
   }
 
   private handleFlipCardMask(): boolean {
@@ -652,6 +695,17 @@ export class DouyinScheduler {
       return false;
     }
     click(btn.entry.bounds.centerX(), btn.entry.bounds.centerY());
+    sleep(700);
+    return true;
+  }
+
+  private tapByKeywords(keywords: string[]): boolean {
+    const hit = this.ocrService.findByOCR(keywords);
+    if (!hit) {
+      return false;
+    }
+    click(hit.entry.bounds.centerX(), hit.entry.bounds.centerY());
+    console.log(`[DouyinScheduler] 点击关键词按钮 label=${hit.entry.label} query=${hit.query}`);
     sleep(700);
     return true;
   }

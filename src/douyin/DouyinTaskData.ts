@@ -18,6 +18,8 @@ export interface DouyinUiLexicon {
   taskPanelMarker: OCRQuery;
   openAllTasks: OCRQuery;
   taskListMarker: OCRQuery;
+  taskListStructuralKeywords: OCRQuery;
+  taskListTaskKeywords: OCRQuery;
   adExitButtons: OCRQuery;
   adContinueButtons: OCRQuery;
   signInMaskKeywords: OCRQuery;
@@ -45,8 +47,10 @@ export interface DouyinUiLexicon {
 export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   earnCoinEntry: ['赚金币'],
   taskPanelMarker: ['全部任务', '收金币', '收集中', '升级中'],
-  openAllTasks: ['全部任务', '做任务赚金币'],
+  openAllTasks: ['全部任务'],
   taskListMarker: ['做任务赚金币'],
+  taskListStructuralKeywords: ['X', '关闭'],
+  taskListTaskKeywords: ['每日签到', '翻卡片领金币', '天天拆红包', '看视频赚金币', '已完成'],
   adExitButtons: ['领取成功', '领取奖励', '开心收下', '去提现', '关闭', '跳过', '跳过广告', 'X'],
   adContinueButtons: ['继续领奖励', '继续观看', '看广告翻开', '看广告重翻'],
   signInMaskKeywords: ['立即签到', '签到领金币', '每日签到', '金币到账'],

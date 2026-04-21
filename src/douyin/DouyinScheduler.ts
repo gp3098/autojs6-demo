@@ -50,8 +50,10 @@ export class DouyinScheduler {
   private overlayStuckCount = 0;
   private lastOverlay: DouyinOverlay = 'NONE';
   private homeEntryClickTs = 0;
+  private taskListExpandHintUntil = 0;
   private adPageEnterTs = 0;
   private adLastBlindTapTs = 0;
+  private adConfirmBlindTapTs = 0;
   private busyTaskStuckLoops = 0;
   private busyTaskId: string | null = null;
 
@@ -66,10 +68,15 @@ export class DouyinScheduler {
 
     this.isDestroyed = false;
     while (!this.isDestroyed) {
-      this.ensureAppLaunched();
-      this.detectAndDispatchPage();
-      this.handleGlobalPopups();
-      this.handleTick();
+      this.ocrService.beginTick();
+      try {
+        this.ensureAppLaunched();
+        this.detectAndDispatchPage();
+        this.handleGlobalPopups();
+        this.handleTick();
+      } finally {
+        this.ocrService.endTick();
+      }
       sleep(1500);
     }
   }
@@ -203,7 +210,13 @@ export class DouyinScheduler {
       page = 'TASK_HOME';
       subPage = 'MAIN_HOME';
     } else if (activity.indexOf('BulletContainerActivity') >= 0) {
-      if (this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListMarker)) {
+      const inExpandHintWindow = Date.now() < this.taskListExpandHintUntil;
+      const hasAllTasksEntry = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.openAllTasks);
+      const hasTaskListTitle = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListMarker);
+      const hasTaskListStructure = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListStructuralKeywords);
+      const hasTaskItems = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListTaskKeywords);
+      const isTaskListExpanded = inExpandHintWindow || ((hasTaskListStructure || hasTaskListTitle) && hasTaskItems && !hasAllTasksEntry);
+      if (isTaskListExpanded) {
         page = 'TASK_LIST';
         subPage = 'TASK_LIST';
       } else {
@@ -241,6 +254,7 @@ export class DouyinScheduler {
     if (state.page !== 'AD_VIDEO') {
       this.adPageEnterTs = 0;
       this.adLastBlindTapTs = 0;
+      this.adConfirmBlindTapTs = 0;
     }
 
     if (state.overlay !== 'NONE') {
@@ -402,6 +416,7 @@ export class DouyinScheduler {
 
     console.log(`[DouyinScheduler] 点击任务面板入口: label=${taskListBtn.entry.label}`);
     click(taskListBtn.entry.bounds.centerX(), taskListBtn.entry.bounds.centerY());
+    this.taskListExpandHintUntil = Date.now() + 5000;
     sleep(800);
     this.dispatch({ type: 'RESET_LOST' });
   }
@@ -482,7 +497,14 @@ export class DouyinScheduler {
       this.adPageEnterTs = now;
     }
 
+    const state = this.state$.getValue();
+
     if (this.handleAdConfirmDialog()) {
+      return;
+    }
+
+    // 二次确认框在图片层时，常规 OCR/text 可能无法命中；awaiting=true 时优先走专用盲点。
+    if (state.awaitingTaskReturn && this.tryTapAdConfirmBlindArea(now)) {
       return;
     }
 
@@ -490,7 +512,6 @@ export class DouyinScheduler {
       return;
     }
 
-    const state = this.state$.getValue();
     const hasTaskContext = !!state.currentTaskId;
     const adStayMs = now - this.adPageEnterTs;
     const firstBlindTapThreshold = hasTaskContext ? 32000 : 45000;
@@ -598,6 +619,21 @@ export class DouyinScheduler {
     }
 
     return false;
+  }
+
+  private tryTapAdConfirmBlindArea(now: number): boolean {
+    if (now - this.adConfirmBlindTapTs < 3500) {
+      return false;
+    }
+    // 用户提供的二次确认按钮区域: [925,960,1003,1038]
+    const x = 964;
+    const y = 999;
+    click(x, y);
+    this.adConfirmBlindTapTs = now;
+    console.log('[DouyinScheduler] 二次确认弹窗盲点点击');
+    sleep(500);
+    this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
+    return true;
   }
 
   private handleAdUiButtonsWithoutOCR(): boolean {

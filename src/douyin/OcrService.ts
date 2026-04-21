@@ -27,6 +27,18 @@ export class OcrService {
   private captureBackoffUntil = 0;
   private lastCaptureErrorAt = 0;
   private consecutiveCaptureFailures = 0;
+  private inTick = false;
+  private tickCacheBySlim: { [key: string]: OCREntry[] | null } = {};
+
+  public beginTick() {
+    this.inTick = true;
+    this.tickCacheBySlim = {};
+  }
+
+  public endTick() {
+    this.inTick = false;
+    this.tickCacheBySlim = {};
+  }
 
   public ocrContains(query: OCRQuery, options: OCRFindOptions = {}): boolean {
     return this.findByOCR(query, options) != null;
@@ -80,6 +92,19 @@ export class OcrService {
   }
 
   public detectEntries(useSlim: boolean): OCREntry[] {
+    const cacheKey = useSlim ? 'slim' : 'full';
+    if (this.inTick && Object.prototype.hasOwnProperty.call(this.tickCacheBySlim, cacheKey)) {
+      return this.tickCacheBySlim[cacheKey] || [];
+    }
+
+    const result = this.detectEntriesInternal(useSlim);
+    if (this.inTick) {
+      this.tickCacheBySlim[cacheKey] = result;
+    }
+    return result;
+  }
+
+  private detectEntriesInternal(useSlim: boolean): OCREntry[] {
     if (!this.ensureCapturePermission()) {
       return [];
     }

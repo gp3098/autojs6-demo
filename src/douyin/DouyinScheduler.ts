@@ -11,7 +11,8 @@ export type DouyinOverlay =
   | 'COUPON_MASK'
   | 'SIGN_IN_MASK'
   | 'SIGN_IN_REWARD_MASK'
-  | 'GENERIC_POPUP';
+  | 'GENERIC_POPUP'
+  | 'AD_CONFIRM_MASK';
 export type DouyinSubPage = 'NONE' | 'MAIN_HOME' | 'TASK_PANEL' | 'TASK_LIST' | 'AD_FULLSCREEN' | 'OTHER';
 
 export interface DouyinState {
@@ -108,8 +109,8 @@ export class DouyinScheduler {
     this.state$.pipe(takeUntil(this.destroy$)).subscribe(s => {
       console.log(
         `[DouyinScheduler] page=${s.page} subPage=${s.subPage} overlay=${s.overlay} ` +
-          `busy=${s.busy} currentTask=${s.currentTaskId || '-'} ` +
-          `lost=${s.lostCount} retry=${s.retryCount} awaiting=${s.awaitingTaskReturn}`
+        `busy=${s.busy} currentTask=${s.currentTaskId || '-'} ` +
+        `lost=${s.lostCount} retry=${s.retryCount} awaiting=${s.awaitingTaskReturn}`
       );
     });
   }
@@ -201,6 +202,7 @@ export class DouyinScheduler {
     const hasSignInMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.signInMaskKeywords);
     const hasSignInRewardMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.signInRewardMaskKeywords);
     const hasCouponMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.couponMaskKeywords, { matchMode: 'all' });
+    const hasAdConfirmMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adConfirmKeywords);
     const hasGenericPopup =
       text('以后再说').findOnce() != null ||
       text('取消').findOnce() != null ||
@@ -241,6 +243,8 @@ export class DouyinScheduler {
       overlay = 'SIGN_IN_REWARD_MASK';
     } else if (hasSignInMask && (page === 'TASK_HOME' || page === 'TASK_PANEL' || page === 'TASK_LIST')) {
       overlay = 'SIGN_IN_MASK';
+    } else if (hasAdConfirmMask && page === 'AD_VIDEO') {
+      overlay = 'AD_CONFIRM_MASK';
     } else if (hasGenericPopup) {
       overlay = 'GENERIC_POPUP';
     }
@@ -310,6 +314,8 @@ export class DouyinScheduler {
       handled = this.closeByOCRX();
     } else if (state.overlay === 'SIGN_IN_REWARD_MASK') {
       handled = this.closeByOCRX();
+    } else if (state.overlay === 'AD_CONFIRM_MASK') {
+      handled = this.handleAdConfirmDialog();
     }
     if (handled) {
       this.resetOverlayStuckCounter(state.overlay);
@@ -499,9 +505,8 @@ export class DouyinScheduler {
 
     const state = this.state$.getValue();
 
-    if (this.handleAdConfirmDialog()) {
-      return;
-    }
+    // AD_CONFIRM_MASK overlay handling happens globally now.
+    // If it falls through here, it means we didn't classify it as an overlay.
 
     // FIXME: 暂时关闭盲点功能，改用截图，直到修正截图功能为止
     /*
@@ -586,6 +591,7 @@ export class DouyinScheduler {
   }
 
   private handleAdConfirmDialog(): boolean {
+    console.log('handleAdConfirmDialog start')
     const continueUi = textContains('继续观看').findOnce() || textContains('再看').findOnce();
     if (continueUi) {
       continueUi.clickBounds(10, 10);
@@ -605,16 +611,8 @@ export class DouyinScheduler {
     }
 
     if (!this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adConfirmKeywords)) {
+      console.log('handleAdConfirmDialog: adConfirmKeywords not found', this.ocrService.detectLabels(), DOUYIN_UI_LEXICON.adConfirmKeywords);
       return false;
-    }
-
-    const continueBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmContinueKeywords);
-    if (continueBtn) {
-      click(continueBtn.entry.bounds.centerX(), continueBtn.entry.bounds.centerY());
-      sleep(600);
-      this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
-      this.dispatch({ type: 'RESET_LOST' });
-      return true;
     }
 
     const exactRewardBtn = this.ocrService.findByOCR('继续领奖励', { exactMatch: true });
@@ -625,6 +623,18 @@ export class DouyinScheduler {
       this.dispatch({ type: 'RESET_LOST' });
       return true;
     }
+
+    const continueBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmContinueKeywords);
+    if (continueBtn) {
+      console.log('handleAdConfirmDialog: continueBtn', this.ocrService.detectLabels(), continueBtn);
+      click(continueBtn.entry.bounds.centerX(), continueBtn.entry.bounds.centerY());
+      sleep(600);
+      this.dispatch({ type: 'SET_AWAITING_RETURN', value: false });
+      this.dispatch({ type: 'RESET_LOST' });
+      return true;
+    }
+
+    // (exactRewardBtn is now evaluated earlier)
 
     // 没有继续观看按钮时，兜底选择“坚持退出/换一个”防止卡死
     const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmExitKeywords);

@@ -149,7 +149,7 @@ export class OcrService {
       }
 
       if (now - this.lastStatusLogAt > 4000) {
-        console.log(`[OcrService] Screen captured successfully, detected ${entries.length} text entries.`);
+        console.log(`[OcrService] Screen captured successfully, detected ${entries.length} text entries.`, entries);
         this.lastStatusLogAt = now;
       }
 

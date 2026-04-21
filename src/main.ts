@@ -1,6 +1,7 @@
 import { TaskManager, TaskRecord } from './core/TaskManager';
 import { StateMachineEngine } from './core/StateMachineEngine';
 import { TaskRunStatus } from './core/Enums';
+import { OcrService } from './douyin/OcrService';
 
 
 // 在 Webpack 编译后，由于 BannerPlugin 介入，文件顶部会插入 "ui"; 
@@ -15,6 +16,7 @@ ui.layout(
           <tabs id="tabs" bg="#2196F3" textColor="#ffffff" />
       </appbar>
       <button id="btnAutoAll" text="▶ 自动连跑所有未完成任务" style="Widget.AppCompat.Button.Colored" padding="15" margin="10" />
+      <button id="btnTestDouyinOCR" text="测试：抖音截图OCR" style="Widget.AppCompat.Button.Borderless.Colored" padding="10" margin="0 10 10 10" />
       
       <list id="taskList" layout_weight="1">
           <card w="*" h="auto" margin="10 5" cardElevation="2dp" cardCornerRadius="5dp">
@@ -115,6 +117,18 @@ function stopCurrentThread() {
         ui.run(() => {
             toastLog('所有队列任务执行完毕！');
         });
+    });
+});
+
+(ui as any).btnTestDouyinOCR.on("click", function () {
+    toast('开始执行抖音OCR测试');
+    threads.start(() => {
+        launchApp('抖音商城');
+        sleep(2000);
+        const ocr = new OcrService();
+        const hit = ocr.ocrContains(['广告', '反馈', '领取成功', 'X']);
+        log(`[TEST] douyin ocrContains(['广告','反馈','领取成功','X']) => ${hit}`);
+        toastLog(`抖音OCR测试结果: ${hit ? '命中' : '未命中'}`);
     });
 });
 

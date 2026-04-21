@@ -3,7 +3,7 @@ import { scan, takeUntil } from 'rxjs/operators';
 import { DouyinTaskDefinition, DOUYIN_TASKS, DOUYIN_UI_LEXICON } from './DouyinTaskData';
 import { OcrService, OCREntry, OCRFindResult } from './OcrService';
 
-export type DouyinPage = 'UNKNOWN' | 'TASK_HOME' | 'TASK_LIST' | 'AD_VIDEO';
+export type DouyinPage = 'UNKNOWN' | 'TASK_HOME' | 'TASK_PANEL' | 'TASK_LIST' | 'AD_VIDEO';
 export type DouyinOverlay =
   | 'NONE'
   | 'LOTTERY_MASK'
@@ -12,7 +12,7 @@ export type DouyinOverlay =
   | 'SIGN_IN_MASK'
   | 'SIGN_IN_REWARD_MASK'
   | 'GENERIC_POPUP';
-export type DouyinSubPage = 'NONE' | 'MAIN_HOME' | 'TASK_PANEL' | 'AD_FULLSCREEN' | 'OTHER';
+export type DouyinSubPage = 'NONE' | 'MAIN_HOME' | 'TASK_PANEL' | 'TASK_LIST' | 'AD_FULLSCREEN' | 'OTHER';
 
 export interface DouyinState {
   page: DouyinPage;
@@ -203,8 +203,13 @@ export class DouyinScheduler {
       page = 'TASK_HOME';
       subPage = 'MAIN_HOME';
     } else if (activity.indexOf('BulletContainerActivity') >= 0) {
-      page = 'TASK_LIST';
-      subPage = 'TASK_PANEL';
+      if (this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListMarker)) {
+        page = 'TASK_LIST';
+        subPage = 'TASK_LIST';
+      } else {
+        page = 'TASK_PANEL';
+        subPage = 'TASK_PANEL';
+      }
     } else if (activity.indexOf('ExcitingVideoActivity') >= 0) {
       page = 'AD_VIDEO';
       subPage = 'AD_FULLSCREEN';
@@ -221,7 +226,7 @@ export class DouyinScheduler {
       overlay = 'COUPON_MASK';
     } else if (hasSignInRewardMask) {
       overlay = 'SIGN_IN_REWARD_MASK';
-    } else if (hasSignInMask && (page === 'TASK_HOME' || page === 'TASK_LIST')) {
+    } else if (hasSignInMask && (page === 'TASK_HOME' || page === 'TASK_PANEL' || page === 'TASK_LIST')) {
       overlay = 'SIGN_IN_MASK';
     } else if (hasGenericPopup) {
       overlay = 'GENERIC_POPUP';
@@ -242,7 +247,7 @@ export class DouyinScheduler {
       return;
     }
 
-    if (state.awaitingTaskReturn && state.page === 'TASK_LIST') {
+    if (state.awaitingTaskReturn && (state.page === 'TASK_PANEL' || state.page === 'TASK_LIST')) {
       this.dispatch({ type: 'TASK_FINISHED' });
       return;
     }
@@ -257,6 +262,9 @@ export class DouyinScheduler {
         } else {
           this.dispatch({ type: 'INC_LOST' });
         }
+        return;
+      case 'TASK_PANEL':
+        this.handleTaskPanel();
         return;
       case 'TASK_LIST':
         this.runTaskDispatcher(state);
@@ -275,7 +283,8 @@ export class DouyinScheduler {
   private handleGlobalPopups() {
     const currentPage = this.state$.getValue().page;
     const state = this.state$.getValue();
-    const shouldHandleSignInMask = currentPage === 'TASK_HOME' || currentPage === 'TASK_LIST';
+    const shouldHandleSignInMask =
+      currentPage === 'TASK_HOME' || currentPage === 'TASK_PANEL' || currentPage === 'TASK_LIST';
 
     let handled = false;
 
@@ -387,13 +396,21 @@ export class DouyinScheduler {
     const taskListBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.openAllTasks);
     if (!taskListBtn) {
       this.dispatch({ type: 'INC_LOST' });
-      this.tryFallbackIfNeeded();
+      console.log('[DouyinScheduler] 任务面板未找到"全部任务"按钮');
       return;
     }
 
+    console.log(`[DouyinScheduler] 点击任务面板入口: label=${taskListBtn.entry.label}`);
     click(taskListBtn.entry.bounds.centerX(), taskListBtn.entry.bounds.centerY());
     sleep(800);
     this.dispatch({ type: 'RESET_LOST' });
+  }
+
+  private handleTaskPanel() {
+    if (this.handleCollectGoldAction()) {
+      return;
+    }
+    this.openTaskList();
   }
 
   private runTaskDispatcher(state: DouyinState) {
@@ -427,10 +444,6 @@ export class DouyinScheduler {
     }
     this.busyTaskStuckLoops = 0;
     this.busyTaskId = null;
-
-    if (this.handleCollectGoldAction()) {
-      return;
-    }
 
     const next = this.pickVisibleTask(state.finishedTaskRuns);
     if (!next) {
@@ -616,6 +629,14 @@ export class DouyinScheduler {
   private pickVisibleTask(
     finishedTaskRuns: { [taskId: string]: number }
   ): { task: DouyinTaskDefinition; target: OCRFindResult } | null {
+    const entries = this.ocrService.detectEntries(true);
+    const doneEntries: OCREntry[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      if (entries[i].label.indexOf('已完成') >= 0) {
+        doneEntries.push(entries[i]);
+      }
+    }
+
     const enabledTasks = this.taskDefinitions
       .filter(task => task.enabled)
       .sort((a, b) => a.priority - b.priority);
@@ -628,6 +649,10 @@ export class DouyinScheduler {
       }
       const target = this.ocrService.findByOCR(task.entryKeywords);
       if (target) {
+        if (this.isTaskDoneByRow(target.entry, doneEntries)) {
+          console.log(`[DouyinScheduler] 跳过已完成任务 entry=${target.entry.label}`);
+          continue;
+        }
         return { task, target };
       }
     }
@@ -650,6 +675,11 @@ export class DouyinScheduler {
   }
 
   private handleCollectGoldAction(): boolean {
+    const upgrading = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.upgradingKeywords);
+    if (upgrading) {
+      return false;
+    }
+
     const collecting = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.collectingKeywords);
     if (collecting) {
       return false;
@@ -663,6 +693,18 @@ export class DouyinScheduler {
     click(collectBtn.entry.bounds.centerX(), collectBtn.entry.bounds.centerY());
     sleep(600);
     return true;
+  }
+
+  private isTaskDoneByRow(taskEntry: OCREntry, doneEntries: OCREntry[]): boolean {
+    for (let i = 0; i < doneEntries.length; i++) {
+      const done = doneEntries[i];
+      const sameRow = Math.abs(done.bounds.centerY() - taskEntry.bounds.centerY()) < 90;
+      const rightSide = done.bounds.centerX() > taskEntry.bounds.centerX() + 120;
+      if (sameRow && rightSide) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private handleCurrentTaskPendingAction(taskId: string | null): boolean {

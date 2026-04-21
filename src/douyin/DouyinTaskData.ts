@@ -15,6 +15,7 @@ export interface DouyinTaskDefinition {
 
 export interface DouyinUiLexicon {
   earnCoinEntry: OCRQuery;
+  taskPanelMarker: OCRQuery;
   openAllTasks: OCRQuery;
   taskListMarker: OCRQuery;
   adExitButtons: OCRQuery;
@@ -28,6 +29,8 @@ export interface DouyinUiLexicon {
   signInRewardMaskKeywords: OCRQuery;
   collectGoldKeywords: OCRQuery;
   collectingKeywords: OCRQuery;
+  upgradingKeywords: OCRQuery;
+  doneKeywords: OCRQuery;
   unsupportedTaskKeywords: OCRQuery;
   unsupportedPageKeywords: OCRQuery;
   flipCardMaskTitleKeywords: OCRQuery;
@@ -41,6 +44,7 @@ export interface DouyinUiLexicon {
 
 export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   earnCoinEntry: ['赚金币'],
+  taskPanelMarker: ['全部任务', '收金币', '收集中', '升级中'],
   openAllTasks: ['全部任务', '做任务赚金币'],
   taskListMarker: ['做任务赚金币'],
   adExitButtons: ['领取成功', '领取奖励', '开心收下', '去提现', '关闭', '跳过', '跳过广告', 'X'],
@@ -54,6 +58,8 @@ export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   signInRewardMaskKeywords: ['看广告视频再得', '金币到账+'],
   collectGoldKeywords: ['收金币'],
   collectingKeywords: ['收集中'],
+  upgradingKeywords: ['升级中'],
+  doneKeywords: ['已完成'],
   unsupportedTaskKeywords: ['逛精选频道赚金币'],
   unsupportedPageKeywords: ['逛精选频道赚金币', '精选频道'],
   flipCardMaskTitleKeywords: ['翻最后一张卡', '翻开加倍卡后将直接获得奖励'],

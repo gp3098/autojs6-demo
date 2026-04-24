@@ -23,7 +23,8 @@ export type DouyinOverlay =
   | "GENERIC_POPUP"
   | "LUCKY_STRIKE_EXCLUSIVE_BONUS_MASK"
   | "DAILY_COUPONS_MASK"
-  | "AD_CONFIRM_MASK";
+  | "AD_CONFIRM_MASK"
+  | "SPLIT_PACKET_TASK_PAGE";
 export type DouyinSubPage =
   | "NONE"
   | "MAIN_HOME"
@@ -248,6 +249,11 @@ export class DouyinScheduler {
     let subPage: DouyinSubPage = "OTHER";
     let overlay: DouyinOverlay = "NONE";
 
+    const inSplitPacketTaskPage = this.ocrService.ocrContains(
+      DOUYIN_UI_LEXICON.splitPacketTaskPageKeywords,
+      { matchMode: "all" },
+    );
+
     const hasLotteryMask = this.ocrService.ocrContains(
       DOUYIN_UI_LEXICON.lotteryMaskKeywords,
       { matchMode: "all" },
@@ -344,6 +350,8 @@ export class DouyinScheduler {
       overlay = "LUCKY_STRIKE_EXCLUSIVE_BONUS_MASK";
     } else if (hasDailyCouponsMask) {
       overlay = "DAILY_COUPONS_MASK";
+    } else if (inSplitPacketTaskPage) {
+      overlay = "SPLIT_PACKET_TASK_PAGE";
     }
 
     this.dispatch({ type: "PAGE_DETECTED", page, overlay, subPage });
@@ -422,6 +430,8 @@ export class DouyinScheduler {
       handled = this.handleLuckyBoundsMask();
     } else if (state.overlay === "DAILY_COUPONS_MASK") {
       handled = this.handleDailyCouponsMask();
+    } else if (state.overlay === "SPLIT_PACKET_TASK_PAGE") {
+      handled = this.handleSplitPacketTaskPage();
     }
     if (handled) {
       this.resetOverlayStuckCounter(state.overlay);
@@ -516,6 +526,22 @@ export class DouyinScheduler {
 
     return this.closeByOCRX();
     // return false;
+  }
+
+  private handleSplitPacketTaskPage(): boolean {
+    if (String(currentPackage() || "") !== this.appPackage) {
+      return false;
+    }
+
+    const splitPacketTaskPageKeywords = this.ocrService.ocrContains(
+      DOUYIN_UI_LEXICON.splitPacketTaskPageKeywords,
+      { matchMode: "all" },
+    );
+    if (!splitPacketTaskPageKeywords) {
+      return false;
+    }
+
+    return this.tapByKeywords(["看视频拆开红包", "看视频拆红包", "天天拆红包"]);
   }
 
   private handleDailyCouponsMask(): boolean {
@@ -857,12 +883,13 @@ export class DouyinScheduler {
       return true;
     }
 
+    console.log("[DouyinScheduler] 尝试点击继续观看");
     if (!this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adConfirmKeywords)) {
       return false;
     }
 
     const exactRewardBtn = this.ocrService.findByOCR(
-      ["继续领奖励", "继续領奖励"],
+      ["继续领奖励", "继续領奖励", "继续观看"],
       { exactMatch: true },
     );
     if (exactRewardBtn) {
@@ -1102,6 +1129,7 @@ export class DouyinScheduler {
 
   private tapByKeywords(keywords: string[]): boolean {
     const hit = this.ocrService.findByOCR(keywords);
+    console.log("tapByKeywords", keywords, "hit", hit);
     if (!hit) {
       return false;
     }

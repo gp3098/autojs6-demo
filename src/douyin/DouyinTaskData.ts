@@ -24,6 +24,7 @@ export interface DouyinUiLexicon {
   adExitButtons: OCRQuery;
   adContinueButtons: OCRQuery;
   signInMaskKeywords: OCRQuery;
+  splitPacketTaskPageKeywords: OCRQuery;
   lotteryMaskKeywords: OCRQuery;
   lotteryDrawKeywords: OCRQuery;
   lotteryBusyKeywords: OCRQuery;
@@ -77,6 +78,14 @@ export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   ],
   adContinueButtons: ["继续领奖励", "继续观看", "看广告翻开", "看广告重翻"],
   signInMaskKeywords: ["立即签到", "签到领金币", "每日签到", "金币到账"],
+  splitPacketTaskPageKeywords: [
+    "看视频拆红包",
+    "最高得",
+    "看视频拆开红包",
+    "今日第",
+    "个红包",
+    "累计已得",
+  ],
   lotteryMaskKeywords: ["天天抽奖", "今天抽奖明天领", "立即抽奖"],
   lotteryDrawKeywords: ["立即抽奖"],
   lotteryBusyKeywords: ["活动太火爆了", "请稍后再试"],

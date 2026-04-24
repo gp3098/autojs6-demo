@@ -55,13 +55,7 @@ export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   taskListMarker: ["做任务赚金币"],
   taskListStructuralKeywords: ["X", "关闭"],
   dailyCouponsMaskKeywords: ["每日可兑好券", "去看看"],
-  taskListTaskKeywords: [
-    "每日签到",
-    "翻卡片领金币",
-    "天天拆红包",
-    "看视频赚金币",
-    "已完成",
-  ],
+  taskListTaskKeywords: ["每日签到", "翻卡片领金币", "天天拆红包", "看视频赚金币", "已完成"],
   adExitButtons: [
     "领取成功",
     "领取戌功",

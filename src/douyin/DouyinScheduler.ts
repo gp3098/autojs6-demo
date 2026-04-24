@@ -1,18 +1,9 @@
 import { BehaviorSubject, Subject } from "rxjs";
 import { scan, takeUntil } from "rxjs/operators";
-import {
-  DouyinTaskDefinition,
-  DOUYIN_TASKS,
-  DOUYIN_UI_LEXICON,
-} from "./DouyinTaskData";
+import { DouyinTaskDefinition, DOUYIN_TASKS, DOUYIN_UI_LEXICON } from "./DouyinTaskData";
 import { OcrService, OCREntry, OCRFindResult } from "./OcrService";
 
-export type DouyinPage =
-  | "UNKNOWN"
-  | "TASK_HOME"
-  | "TASK_PANEL"
-  | "TASK_LIST"
-  | "AD_VIDEO";
+export type DouyinPage = "UNKNOWN" | "TASK_HOME" | "TASK_PANEL" | "TASK_LIST" | "AD_VIDEO";
 export type DouyinOverlay =
   | "NONE"
   | "LOTTERY_MASK"
@@ -67,9 +58,7 @@ export class DouyinScheduler {
   private readonly appName = "抖音商城";
   private readonly homeActivity = "com.ss.android.ugc.aweme.main.MainActivity";
   private readonly action$ = new Subject<DouyinAction>();
-  private readonly state$ = new BehaviorSubject<DouyinState>(
-    this.initialState(),
-  );
+  private readonly state$ = new BehaviorSubject<DouyinState>(this.initialState());
   private readonly destroy$ = new Subject<void>();
   private readonly ocrService = new OcrService();
   private isDestroyed = false;
@@ -83,9 +72,7 @@ export class DouyinScheduler {
   private busyTaskStuckLoops = 0;
   private busyTaskId: string | null = null;
 
-  constructor(
-    private readonly taskDefinitions: DouyinTaskDefinition[] = DOUYIN_TASKS,
-  ) {
+  constructor(private readonly taskDefinitions: DouyinTaskDefinition[] = DOUYIN_TASKS) {
     this.setupStateMachine();
     this.setupLogger();
   }
@@ -126,11 +113,8 @@ export class DouyinScheduler {
   private setupStateMachine() {
     this.action$
       .pipe(
-        scan(
-          (state, action) => this.reducer(state, action),
-          this.initialState(),
-        ),
-        takeUntil(this.destroy$),
+        scan((state, action) => this.reducer(state, action), this.initialState()),
+        takeUntil(this.destroy$)
       )
       .subscribe(this.state$);
   }
@@ -140,7 +124,7 @@ export class DouyinScheduler {
       console.log(
         `[DouyinScheduler] page=${s.page} subPage=${s.subPage} overlay=${s.overlay} ` +
           `busy=${s.busy} currentTask=${s.currentTaskId || "-"} ` +
-          `lost=${s.lostCount} retry=${s.retryCount} awaiting=${s.awaitingTaskReturn}`,
+          `lost=${s.lostCount} retry=${s.retryCount} awaiting=${s.awaitingTaskReturn}`
       );
     });
   }
@@ -251,40 +235,32 @@ export class DouyinScheduler {
 
     const inSplitPacketTaskPage = this.ocrService.ocrContains(
       DOUYIN_UI_LEXICON.splitPacketTaskPageKeywords,
-      { matchMode: "all" },
+      { matchMode: "all" }
     );
 
-    const hasLotteryMask = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.lotteryMaskKeywords,
-      { matchMode: "all" },
-    );
-    const hasFlipCardAction = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.flipCardActionKeywords,
-    );
+    const hasLotteryMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.lotteryMaskKeywords, {
+      matchMode: "all",
+    });
+    const hasFlipCardAction = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.flipCardActionKeywords);
     const hasFlipCardTitle = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.flipCardMaskTitleKeywords,
+      DOUYIN_UI_LEXICON.flipCardMaskTitleKeywords
     );
-    const hasSignInMask = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.signInMaskKeywords,
-    );
+    const hasSignInMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.signInMaskKeywords);
     const hasSignInRewardMask = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.signInRewardMaskKeywords,
+      DOUYIN_UI_LEXICON.signInRewardMaskKeywords
     );
-    const hasCouponMask = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.couponMaskKeywords,
-      { matchMode: "all" },
-    );
-    const hasAdConfirmMask = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.adConfirmKeywords,
-    );
+    const hasCouponMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.couponMaskKeywords, {
+      matchMode: "all",
+    });
+    const hasAdConfirmMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adConfirmKeywords);
 
     const hasLuckyStrikeExclusiveBoundsMask = this.ocrService.ocrContains(
       DOUYIN_UI_LEXICON.luckyStrikeExclusiveBoundsKeywords,
-      { matchMode: "all" },
+      { matchMode: "all" }
     );
     const hasDailyCouponsMask = this.ocrService.ocrContains(
       DOUYIN_UI_LEXICON.dailyCouponsMaskKeywords,
-      { matchMode: "all" },
+      { matchMode: "all" }
     );
     const hasGenericPopup =
       text("以后再说").findOnce() != null ||
@@ -296,24 +272,16 @@ export class DouyinScheduler {
       subPage = "MAIN_HOME";
     } else if (activity.indexOf("BulletContainerActivity") >= 0) {
       const inExpandHintWindow = Date.now() < this.taskListExpandHintUntil;
-      const hasAllTasksEntry = this.ocrService.ocrContains(
-        DOUYIN_UI_LEXICON.openAllTasks,
-      );
-      const hasTaskListTitle = this.ocrService.ocrContains(
-        DOUYIN_UI_LEXICON.taskListMarker,
-      );
+      const hasAllTasksEntry = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.openAllTasks);
+      const hasTaskListTitle = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListMarker);
       const hasTaskListStructure = this.ocrService.ocrContains(
-        DOUYIN_UI_LEXICON.taskListStructuralKeywords,
+        DOUYIN_UI_LEXICON.taskListStructuralKeywords
       );
-      const hasTaskItems = this.ocrService.ocrContains(
-        DOUYIN_UI_LEXICON.taskListTaskKeywords,
-      );
+      const hasTaskItems = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.taskListTaskKeywords);
 
       const isTaskListExpanded =
         inExpandHintWindow ||
-        ((hasTaskListStructure || hasTaskListTitle) &&
-          hasTaskItems &&
-          !hasAllTasksEntry);
+        ((hasTaskListStructure || hasTaskListTitle) && hasTaskItems && !hasAllTasksEntry);
       if (isTaskListExpanded) {
         page = "TASK_LIST";
         subPage = "TASK_LIST";
@@ -370,10 +338,7 @@ export class DouyinScheduler {
       return;
     }
 
-    if (
-      state.awaitingTaskReturn &&
-      (state.page === "TASK_PANEL" || state.page === "TASK_LIST")
-    ) {
+    if (state.awaitingTaskReturn && (state.page === "TASK_PANEL" || state.page === "TASK_LIST")) {
       this.dispatch({ type: "TASK_FINISHED" });
       return;
     }
@@ -410,9 +375,7 @@ export class DouyinScheduler {
     const currentPage = this.state$.getValue().page;
     const state = this.state$.getValue();
     const shouldHandleSignInMask =
-      currentPage === "TASK_HOME" ||
-      currentPage === "TASK_PANEL" ||
-      currentPage === "TASK_LIST";
+      currentPage === "TASK_HOME" || currentPage === "TASK_PANEL" || currentPage === "TASK_LIST";
 
     let handled = false;
 
@@ -440,8 +403,7 @@ export class DouyinScheduler {
 
     if (state.overlay === "SIGN_IN_MASK" && shouldHandleSignInMask) {
       const signInBtn =
-        textContains("立即签到").findOnce() ||
-        textContains("签到领金币").findOnce();
+        textContains("立即签到").findOnce() || textContains("签到领金币").findOnce();
       if (signInBtn) {
         signInBtn.clickBounds(10, 10);
         sleep(500);
@@ -449,9 +411,7 @@ export class DouyinScheduler {
         return;
       }
 
-      const signMask = this.ocrService.findByOCR(
-        DOUYIN_UI_LEXICON.signInMaskKeywords,
-      );
+      const signMask = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.signInMaskKeywords);
       if (signMask) {
         click(signMask.entry.bounds.centerX(), signMask.entry.bounds.centerY());
         sleep(500);
@@ -487,39 +447,29 @@ export class DouyinScheduler {
       return false;
     }
 
-    const hasLotteryMask = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.lotteryMaskKeywords,
-      { matchMode: "all" },
-    );
+    const hasLotteryMask = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.lotteryMaskKeywords, {
+      matchMode: "all",
+    });
     if (!hasLotteryMask) {
       return false;
     }
 
     //这段时间都是火爆
-    const isBusy = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.lotteryBusyKeywords,
-    );
+    const isBusy = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.lotteryBusyKeywords);
     if (isBusy) {
       return this.closeByOCRX();
     }
 
-    const drawBtn = this.ocrService.findByOCR(
-      DOUYIN_UI_LEXICON.lotteryDrawKeywords,
-    );
+    const drawBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.lotteryDrawKeywords);
     if (drawBtn) {
       click(drawBtn.entry.bounds.centerX(), drawBtn.entry.bounds.centerY());
       sleep(500);
       return true;
     }
 
-    const closeFallback = this.ocrService.findByOCR(
-      DOUYIN_UI_LEXICON.closeKeywords,
-    );
+    const closeFallback = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.closeKeywords);
     if (closeFallback) {
-      click(
-        closeFallback.entry.bounds.centerX(),
-        closeFallback.entry.bounds.centerY(),
-      );
+      click(closeFallback.entry.bounds.centerX(), closeFallback.entry.bounds.centerY());
       sleep(500);
       return true;
     }
@@ -535,7 +485,7 @@ export class DouyinScheduler {
 
     const splitPacketTaskPageKeywords = this.ocrService.ocrContains(
       DOUYIN_UI_LEXICON.splitPacketTaskPageKeywords,
-      { matchMode: "all" },
+      { matchMode: "all" }
     );
     if (!splitPacketTaskPageKeywords) {
       return false;
@@ -550,7 +500,7 @@ export class DouyinScheduler {
     }
     const hasDailyCouponsMask = this.ocrService.ocrContains(
       DOUYIN_UI_LEXICON.dailyCouponsMaskKeywords,
-      { matchMode: "all" },
+      { matchMode: "all" }
     );
     if (!hasDailyCouponsMask) {
       return true;
@@ -565,27 +515,20 @@ export class DouyinScheduler {
 
     const hasLuckyStrikeExclusiveBoundsMask = this.ocrService.ocrContains(
       DOUYIN_UI_LEXICON.luckyStrikeExclusiveBoundsKeywords,
-      { matchMode: "all" },
+      { matchMode: "all" }
     );
 
-    console.log(
-      "hasLuckyStrikeExclusiveBoundsMask",
-      hasLuckyStrikeExclusiveBoundsMask,
-    );
+    console.log("hasLuckyStrikeExclusiveBoundsMask", hasLuckyStrikeExclusiveBoundsMask);
     if (!hasLuckyStrikeExclusiveBoundsMask) {
       return false;
     }
 
-    const isBusy = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.lotteryBusyKeywords,
-    );
+    const isBusy = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.lotteryBusyKeywords);
     if (isBusy) {
       return this.closeByOCRX();
     }
 
-    const drawBtn = this.ocrService.findByOCR(
-      DOUYIN_UI_LEXICON.luckyBoundsDrawKeywords,
-    );
+    const drawBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.luckyBoundsDrawKeywords);
     console.log("drawBtn", drawBtn);
     if (drawBtn) {
       click(drawBtn.entry.bounds.centerX(), drawBtn.entry.bounds.centerY());
@@ -602,13 +545,8 @@ export class DouyinScheduler {
 
     const earnCoinBtn = this.findHomeEarnCoinEntry();
     if (earnCoinBtn) {
-      console.log(
-        `[DouyinScheduler] 点击首页入口: label=${earnCoinBtn.entry.label}`,
-      );
-      click(
-        earnCoinBtn.entry.bounds.centerX(),
-        earnCoinBtn.entry.bounds.centerY(),
-      );
+      console.log(`[DouyinScheduler] 点击首页入口: label=${earnCoinBtn.entry.label}`);
+      click(earnCoinBtn.entry.bounds.centerX(), earnCoinBtn.entry.bounds.centerY());
       this.homeEntryClickTs = Date.now();
       sleep(900);
       this.dispatch({ type: "RESET_LOST" });
@@ -619,22 +557,15 @@ export class DouyinScheduler {
   }
 
   private openTaskList() {
-    const taskListBtn = this.ocrService.findByOCR(
-      DOUYIN_UI_LEXICON.openAllTasks,
-    );
+    const taskListBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.openAllTasks);
     if (!taskListBtn) {
       this.dispatch({ type: "INC_LOST" });
       console.log('[DouyinScheduler] 任务面板未找到"全部任务"按钮');
       return;
     }
 
-    console.log(
-      `[DouyinScheduler] 点击任务面板入口: label=${taskListBtn.entry.label}`,
-    );
-    click(
-      taskListBtn.entry.bounds.centerX(),
-      taskListBtn.entry.bounds.centerY(),
-    );
+    console.log(`[DouyinScheduler] 点击任务面板入口: label=${taskListBtn.entry.label}`);
+    click(taskListBtn.entry.bounds.centerX(), taskListBtn.entry.bounds.centerY());
     this.taskListExpandHintUntil = Date.now() + 5000;
     sleep(800);
     this.dispatch({ type: "RESET_LOST" });
@@ -652,15 +583,11 @@ export class DouyinScheduler {
     this.dispatch({ type: "RESET_LOST" });
 
     if (state.busy || state.currentTaskId) {
-      const progressed = this.handleCurrentTaskPendingAction(
-        state.currentTaskId,
-      );
+      const progressed = this.handleCurrentTaskPendingAction(state.currentTaskId);
       if (progressed) {
         this.busyTaskStuckLoops = 0;
         this.busyTaskId = state.currentTaskId;
-        console.log(
-          `[DouyinScheduler] busy任务推进成功 task=${state.currentTaskId || "-"}`,
-        );
+        console.log(`[DouyinScheduler] busy任务推进成功 task=${state.currentTaskId || "-"}`);
         return;
       }
 
@@ -671,7 +598,7 @@ export class DouyinScheduler {
         this.busyTaskStuckLoops = 1;
       }
       console.log(
-        `[DouyinScheduler] busy任务未推进 task=${state.currentTaskId || "-"} loops=${this.busyTaskStuckLoops}`,
+        `[DouyinScheduler] busy任务未推进 task=${state.currentTaskId || "-"} loops=${this.busyTaskStuckLoops}`
       );
       if (this.busyTaskStuckLoops >= 10) {
         console.log("[DouyinScheduler] busy任务卡住超时，执行TASK_ABORT");
@@ -734,9 +661,7 @@ export class DouyinScheduler {
 
     const currentTask = this.getTaskById(state.currentTaskId);
     if (currentTask) {
-      const taskDone = this.ocrService.findByOCR(
-        currentTask.completionKeywords,
-      );
+      const taskDone = this.ocrService.findByOCR(currentTask.completionKeywords);
       if (taskDone) {
         click(taskDone.entry.bounds.centerX(), taskDone.entry.bounds.centerY());
         sleep(600);
@@ -746,14 +671,9 @@ export class DouyinScheduler {
       }
     }
 
-    const continueBtn = this.ocrService.findByOCR(
-      DOUYIN_UI_LEXICON.adContinueButtons,
-    );
+    const continueBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adContinueButtons);
     if (continueBtn) {
-      click(
-        continueBtn.entry.bounds.centerX(),
-        continueBtn.entry.bounds.centerY(),
-      );
+      click(continueBtn.entry.bounds.centerX(), continueBtn.entry.bounds.centerY());
       sleep(600);
       this.dispatch({ type: "SET_AWAITING_RETURN", value: false });
       this.dispatch({ type: "RESET_LOST" });
@@ -764,10 +684,7 @@ export class DouyinScheduler {
     log("handleAdPage", exitBtn, DOUYIN_UI_LEXICON.adExitButtons);
     if (exitBtn) {
       const label = exitBtn.entry.label;
-      const isTimer =
-        /\d+[sS]/.test(label) ||
-        /\d+秒/.test(label) ||
-        label.indexOf("后可领") >= 0;
+      const isTimer = /\d+[sS]/.test(label) || /\d+秒/.test(label) || label.indexOf("后可领") >= 0;
       const isSuccess = /领取成|领取戌/.test(label);
       console.log("handleAdPage", isSuccess);
 
@@ -780,18 +697,13 @@ export class DouyinScheduler {
         this.adLastBlindTapTs = now;
         return;
       } else {
-        console.log(
-          "[DouyinScheduler] Ignore fake exit button with countdown:",
-          label,
-        );
+        console.log("[DouyinScheduler] Ignore fake exit button with countdown:", label);
       }
     }
 
     // 以上有效按钮均未被检测到的情况下，检查是否处于正常的广告播放阶段。
     // （有的广告播放完依然会在界面滞留“广告”水印，通过将有效按钮排在首位，可避免该水印卡死流程）
-    const isAdPlaying = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.adPlayingKeywords,
-    );
+    const isAdPlaying = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.adPlayingKeywords);
     if (isAdPlaying && adStayMs < forceCloseWhilePlayingMs) {
       return;
     }
@@ -850,17 +762,13 @@ export class DouyinScheduler {
         }
       }
     }
-    console.log(
-      `[DouyinScheduler] 二次确认弹窗检测到当前收益数值评估: ${coinAmount}`,
-    );
+    console.log(`[DouyinScheduler] 二次确认弹窗检测到当前收益数值评估: ${coinAmount}`);
 
     const shouldExit = coinAmount > 0 && coinAmount < 100;
 
     if (shouldExit) {
       console.log("[DouyinScheduler] 收益小于100，选择坚持退出");
-      const exitBtn = this.ocrService.findByOCR(
-        DOUYIN_UI_LEXICON.adConfirmExitKeywords,
-      );
+      const exitBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmExitKeywords);
       if (exitBtn) {
         click(exitBtn.entry.bounds.centerX(), exitBtn.entry.bounds.centerY());
         sleep(600);
@@ -888,15 +796,11 @@ export class DouyinScheduler {
       return false;
     }
 
-    const exactRewardBtn = this.ocrService.findByOCR(
-      ["继续领奖励", "继续領奖励", "继续观看"],
-      { exactMatch: true },
-    );
+    const exactRewardBtn = this.ocrService.findByOCR(["继续领奖励", "继续領奖励", "继续观看"], {
+      exactMatch: true,
+    });
     if (exactRewardBtn) {
-      click(
-        exactRewardBtn.entry.bounds.centerX(),
-        exactRewardBtn.entry.bounds.centerY(),
-      );
+      click(exactRewardBtn.entry.bounds.centerX(), exactRewardBtn.entry.bounds.centerY());
       sleep(600);
       this.dispatch({ type: "SET_AWAITING_RETURN", value: false });
       this.dispatch({ type: "RESET_LOST" });
@@ -927,14 +831,9 @@ export class DouyinScheduler {
     }
 
     // 默认兜底防止卡死（如果应该拒绝但没找到退出按钮，或者根本没找到继续观看按钮）
-    const exitFallback = this.ocrService.findByOCR(
-      DOUYIN_UI_LEXICON.adConfirmExitKeywords,
-    );
+    const exitFallback = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.adConfirmExitKeywords);
     if (exitFallback) {
-      click(
-        exitFallback.entry.bounds.centerX(),
-        exitFallback.entry.bounds.centerY(),
-      );
+      click(exitFallback.entry.bounds.centerX(), exitFallback.entry.bounds.centerY());
       sleep(600);
       this.dispatch({ type: "SET_AWAITING_RETURN", value: true });
       this.dispatch({ type: "RESET_LOST" });
@@ -977,8 +876,7 @@ export class DouyinScheduler {
       return true;
     }
 
-    const closeUi =
-      textContains("关闭").findOnce() || textContains("跳过").findOnce();
+    const closeUi = textContains("关闭").findOnce() || textContains("跳过").findOnce();
     if (closeUi) {
       closeUi.clickBounds(10, 10);
       sleep(700);
@@ -1019,9 +917,7 @@ export class DouyinScheduler {
       const target = this.ocrService.findByOCR(task.entryKeywords);
       if (target) {
         if (this.isTaskDoneByRow(target.entry, doneEntries)) {
-          console.log(
-            `[DouyinScheduler] 跳过已完成任务 entry=${target.entry.label}`,
-          );
+          console.log(`[DouyinScheduler] 跳过已完成任务 entry=${target.entry.label}`);
           continue;
         }
         return { task, target };
@@ -1031,9 +927,7 @@ export class DouyinScheduler {
     return null;
   }
 
-  private hasPendingTasks(finishedTaskRuns: {
-    [taskId: string]: number;
-  }): boolean {
+  private hasPendingTasks(finishedTaskRuns: { [taskId: string]: number }): boolean {
     for (let i = 0; i < this.taskDefinitions.length; i++) {
       const task = this.taskDefinitions[i];
       if (!task.enabled) {
@@ -1048,23 +942,17 @@ export class DouyinScheduler {
   }
 
   private handleCollectGoldAction(): boolean {
-    const upgrading = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.upgradingKeywords,
-    );
+    const upgrading = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.upgradingKeywords);
     if (upgrading) {
       return false;
     }
 
-    const collecting = this.ocrService.ocrContains(
-      DOUYIN_UI_LEXICON.collectingKeywords,
-    );
+    const collecting = this.ocrService.ocrContains(DOUYIN_UI_LEXICON.collectingKeywords);
     if (collecting) {
       return false;
     }
 
-    const collectBtn = this.ocrService.findByOCR(
-      DOUYIN_UI_LEXICON.collectGoldKeywords,
-    );
+    const collectBtn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.collectGoldKeywords);
     if (!collectBtn) {
       return false;
     }
@@ -1074,16 +962,11 @@ export class DouyinScheduler {
     return true;
   }
 
-  private isTaskDoneByRow(
-    taskEntry: OCREntry,
-    doneEntries: OCREntry[],
-  ): boolean {
+  private isTaskDoneByRow(taskEntry: OCREntry, doneEntries: OCREntry[]): boolean {
     for (let i = 0; i < doneEntries.length; i++) {
       const done = doneEntries[i];
-      const sameRow =
-        Math.abs(done.bounds.centerY() - taskEntry.bounds.centerY()) < 90;
-      const rightSide =
-        done.bounds.centerX() > taskEntry.bounds.centerX() + 120;
+      const sameRow = Math.abs(done.bounds.centerY() - taskEntry.bounds.centerY()) < 90;
+      const rightSide = done.bounds.centerX() > taskEntry.bounds.centerX() + 120;
       if (sameRow && rightSide) {
         return true;
       }
@@ -1116,9 +999,7 @@ export class DouyinScheduler {
   }
 
   private tapFlipCardAdButton(): boolean {
-    const btn = this.ocrService.findByOCR(
-      DOUYIN_UI_LEXICON.flipCardActionKeywords,
-    );
+    const btn = this.ocrService.findByOCR(DOUYIN_UI_LEXICON.flipCardActionKeywords);
     if (!btn) {
       return false;
     }
@@ -1149,15 +1030,13 @@ export class DouyinScheduler {
 
     if (this.isTaskDoneByRow(hit.entry, lockedEntries)) {
       console.log(
-        `[DouyinScheduler] 发现任务处于冷却或锁定状态，拒绝点击 label=${hit.entry.label}`,
+        `[DouyinScheduler] 发现任务处于冷却或锁定状态，拒绝点击 label=${hit.entry.label}`
       );
       return false;
     }
 
     click(hit.entry.bounds.centerX(), hit.entry.bounds.centerY());
-    console.log(
-      `[DouyinScheduler] 点击关键词按钮 label=${hit.entry.label} query=${hit.query}`,
-    );
+    console.log(`[DouyinScheduler] 点击关键词按钮 label=${hit.entry.label} query=${hit.query}`);
     sleep(700);
     return true;
   }
@@ -1183,9 +1062,7 @@ export class DouyinScheduler {
     if (state.page !== "TASK_HOME" || state.subPage === "MAIN_HOME") {
       return false;
     }
-    if (
-      !this.ocrService.ocrContains(DOUYIN_UI_LEXICON.unsupportedPageKeywords)
-    ) {
+    if (!this.ocrService.ocrContains(DOUYIN_UI_LEXICON.unsupportedPageKeywords)) {
       return false;
     }
     console.log("[DouyinScheduler] 检测到未适配页面关键词，执行返回");
@@ -1236,11 +1113,7 @@ export class DouyinScheduler {
     if (text.indexOf("赚金币") < 0) {
       return false;
     }
-    if (
-      text.indexOf("频道") >= 0 ||
-      text.indexOf("任务列表") >= 0 ||
-      text.indexOf("逛精选") >= 0
-    ) {
+    if (text.indexOf("频道") >= 0 || text.indexOf("任务列表") >= 0 || text.indexOf("逛精选") >= 0) {
       return false;
     }
     return text.length <= 12;

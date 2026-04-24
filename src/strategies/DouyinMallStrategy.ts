@@ -1,10 +1,10 @@
-import { IAppTaskStrategy } from '../core/IAppTaskStrategy';
-import { AdState } from '../core/Enums';
-import { DouyinScheduler } from '../douyin/DouyinScheduler';
+import { IAppTaskStrategy } from "../core/IAppTaskStrategy";
+import { AdState } from "../core/Enums";
+import { DouyinScheduler } from "../douyin/DouyinScheduler";
 
 export class DouyinMallStrategy implements IAppTaskStrategy {
-  public appPackage = 'com.ss.android.ugc.livelite';
-  public appName = '抖音商城';
+  public appPackage = "com.ss.android.ugc.livelite";
+  public appName = "抖音商城";
 
   private scheduler: DouyinScheduler | null = null;
 
@@ -28,8 +28,8 @@ export class DouyinMallStrategy implements IAppTaskStrategy {
     return false;
   }
 
-  handleWelfarePage(): 'TRIGGER_AD' | 'FINISHED' | 'WAITING' {
-    return 'WAITING';
+  handleWelfarePage(): "TRIGGER_AD" | "FINISHED" | "WAITING" {
+    return "WAITING";
   }
 
   pollAdSubTask(_currentState: AdState): { nextState?: AdState; requestFallback?: boolean } {

@@ -46,10 +46,7 @@ export class OcrService {
     return this.findByOCR(query, options) != null;
   }
 
-  public findByOCR(
-    query: OCRQuery,
-    options: OCRFindOptions = {},
-  ): OCRFindResult | null {
+  public findByOCR(query: OCRQuery, options: OCRFindOptions = {}): OCRFindResult | null {
     const {
       matchMode = "any",
       useSlim = true,
@@ -103,10 +100,7 @@ export class OcrService {
 
   public detectEntries(useSlim: boolean): OCREntry[] {
     const cacheKey = useSlim ? "slim" : "full";
-    if (
-      this.inTick &&
-      Object.prototype.hasOwnProperty.call(this.tickCacheBySlim, cacheKey)
-    ) {
+    if (this.inTick && Object.prototype.hasOwnProperty.call(this.tickCacheBySlim, cacheKey)) {
       return this.tickCacheBySlim[cacheKey] || [];
     }
 
@@ -168,7 +162,7 @@ export class OcrService {
         console.log(
           `[OcrService] Screen captured successfully, detected ${entries.length} text entries.`,
           entries,
-          rawResults,
+          rawResults
         );
         this.lastStatusLogAt = now;
       }
@@ -184,7 +178,7 @@ export class OcrService {
       if (nowTs - this.lastCaptureErrorAt > 4000) {
         console.error(
           `[OcrService] Capture screen error (consecutive ${this.consecutiveCaptureFailures} times):`,
-          error,
+          error
         );
         this.lastCaptureErrorAt = nowTs;
       }
@@ -242,7 +236,7 @@ export class OcrService {
     entries: OCREntry[],
     query: string,
     caseSensitive: boolean,
-    exactMatch: boolean,
+    exactMatch: boolean
   ): OCREntry | null {
     for (let i = 0; i < entries.length; i++) {
       const rawLabel = entries[i].label;

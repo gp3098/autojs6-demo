@@ -1,5 +1,5 @@
 export type OCRQuery = string | string[];
-export type OCRMatchMode = 'any' | 'all';
+export type OCRMatchMode = "any" | "all";
 
 export interface OCRFindOptions {
   matchMode?: OCRMatchMode;
@@ -46,8 +46,16 @@ export class OcrService {
     return this.findByOCR(query, options) != null;
   }
 
-  public findByOCR(query: OCRQuery, options: OCRFindOptions = {}): OCRFindResult | null {
-    const { matchMode = 'any', useSlim = true, caseSensitive = false, exactMatch = false } = options;
+  public findByOCR(
+    query: OCRQuery,
+    options: OCRFindOptions = {},
+  ): OCRFindResult | null {
+    const {
+      matchMode = "any",
+      useSlim = true,
+      caseSensitive = false,
+      exactMatch = false,
+    } = options;
     const entries = this.detectEntries(useSlim);
     if (!entries.length) {
       return null;
@@ -58,7 +66,7 @@ export class OcrService {
       return null;
     }
 
-    if (matchMode === 'all') {
+    if (matchMode === "all") {
       let firstMatch: OCRFindResult | null = null;
       for (let i = 0; i < keywords.length; i++) {
         const q = keywords[i];
@@ -94,8 +102,11 @@ export class OcrService {
   }
 
   public detectEntries(useSlim: boolean): OCREntry[] {
-    const cacheKey = useSlim ? 'slim' : 'full';
-    if (this.inTick && Object.prototype.hasOwnProperty.call(this.tickCacheBySlim, cacheKey)) {
+    const cacheKey = useSlim ? "slim" : "full";
+    if (
+      this.inTick &&
+      Object.prototype.hasOwnProperty.call(this.tickCacheBySlim, cacheKey)
+    ) {
       return this.tickCacheBySlim[cacheKey] || [];
     }
 
@@ -140,16 +151,25 @@ export class OcrService {
 
       for (let i = 0; i < arr.length; i++) {
         const item: any = arr[i];
-        const label = String(item?.label || '').trim();
+        const label = String(item?.label || "").trim();
         const bounds = item?.bounds as OCRBoundsLike;
-        if (!label || !bounds || typeof bounds.centerX !== 'function' || typeof bounds.centerY !== 'function') {
+        if (
+          !label ||
+          !bounds ||
+          typeof bounds.centerX !== "function" ||
+          typeof bounds.centerY !== "function"
+        ) {
           continue;
         }
         entries.push({ label, bounds });
       }
 
       if (now - this.lastStatusLogAt > 4000) {
-        console.log(`[OcrService] Screen captured successfully, detected ${entries.length} text entries.`, entries);
+        console.log(
+          `[OcrService] Screen captured successfully, detected ${entries.length} text entries.`,
+          entries,
+          rawResults,
+        );
         this.lastStatusLogAt = now;
       }
 
@@ -162,7 +182,10 @@ export class OcrService {
       this.captureBackoffUntil = Date.now() + 1500;
       const nowTs = Date.now();
       if (nowTs - this.lastCaptureErrorAt > 4000) {
-        console.error(`[OcrService] Capture screen error (consecutive ${this.consecutiveCaptureFailures} times):`, error);
+        console.error(
+          `[OcrService] Capture screen error (consecutive ${this.consecutiveCaptureFailures} times):`,
+          error,
+        );
         this.lastCaptureErrorAt = nowTs;
       }
       return [];
@@ -183,10 +206,10 @@ export class OcrService {
       const w = Number((device as any)?.width || 0);
       const h = Number((device as any)?.height || 0);
       const isLandscape = w > h;
-      
+
       const ok = requestScreenCapture(isLandscape);
       if (!ok) {
-        toastLog('需要截图权限来进行 OCR');
+        toastLog("需要截图权限来进行 OCR");
         this.captureBackoffUntil = Date.now() + 4000;
         return false;
       }
@@ -194,7 +217,7 @@ export class OcrService {
       this.consecutiveCaptureFailures = 0;
       return true;
     } catch (error) {
-      console.error('requestScreenCapture error', error);
+      console.error("requestScreenCapture error", error);
       this.captureBackoffUntil = Date.now() + 8000;
       return false;
     }
@@ -205,7 +228,7 @@ export class OcrService {
     const out: string[] = [];
 
     for (let i = 0; i < source.length; i++) {
-      const normalized = String(source[i] || '').trim();
+      const normalized = String(source[i] || "").trim();
       if (!normalized) {
         continue;
       }
@@ -215,7 +238,12 @@ export class OcrService {
     return out;
   }
 
-  private findFirstEntry(entries: OCREntry[], query: string, caseSensitive: boolean, exactMatch: boolean): OCREntry | null {
+  private findFirstEntry(
+    entries: OCREntry[],
+    query: string,
+    caseSensitive: boolean,
+    exactMatch: boolean,
+  ): OCREntry | null {
     for (let i = 0; i < entries.length; i++) {
       const rawLabel = entries[i].label;
       const label = caseSensitive ? rawLabel : rawLabel.toLowerCase();

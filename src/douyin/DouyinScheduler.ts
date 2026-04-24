@@ -541,7 +541,7 @@ export class DouyinScheduler {
       return false;
     }
 
-    return this.tapByKeywords(["看视频拆开红包", "看视频拆红包", "天天拆红包"]);
+    return this.tapByKeywords(["看视频拆开红包"]);
   }
 
   private handleDailyCouponsMask(): boolean {

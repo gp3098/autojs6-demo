@@ -75,7 +75,7 @@ export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
   splitPacketTaskPageKeywords: [
     "看视频拆红包",
     "最高得",
-    "看视频拆开红包",
+    /看视频拆开红包|明日继续拆开红包/,
     "今日第",
     "个红包",
     /累计[已|己]得/,

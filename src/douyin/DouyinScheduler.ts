@@ -491,7 +491,7 @@ export class DouyinScheduler {
       return false;
     }
 
-    return this.tapByKeywords(["看视频拆开红包"]);
+    return this.tapByKeywords(["明日继续拆开红包"]) || this.tapByKeywords(["看视频拆开红包"]);
   }
 
   private handleDailyCouponsMask(): boolean {
@@ -742,8 +742,8 @@ export class DouyinScheduler {
     // 解析屏幕上的金币数量以决定策略
     let coinAmount = -1;
     const entries = this.ocrService.detectEntries(true);
-    for (let i = 0; i < entries.length; i++) {
-      const label = entries[i].label;
+    for (const element of entries) {
+      const label = element.label;
       // 过滤掉长文本和带有倒计时的伪数字
       if (
         label.length < 15 &&
@@ -810,13 +810,24 @@ export class DouyinScheduler {
     // 针对继续观看做模糊匹配兜底，但强制过滤掉大于8个字符的长标题（如“再看一个视频继续领奖励”）防止误触标题。
     let fallbackBtn: import("./OcrService").OCREntry | null = null;
     const continueKeywords = DOUYIN_UI_LEXICON.adConfirmContinueKeywords;
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
+    for (const element of entries) {
+      const entry = element;
       if (entry.label.length >= 8) continue; // 判定为标题或长文案，跳过
-      for (let j = 0; j < continueKeywords.length; j++) {
-        if (entry.label.includes(continueKeywords[j])) {
-          fallbackBtn = entry;
-          break;
+      if (Array.isArray(continueKeywords)) {
+        for (const element of continueKeywords) {
+          if (typeof element === "string") {
+            if (entry.label.includes(element)) {
+              fallbackBtn = entry;
+              break;
+            }
+          } else if (element.test(entry.label)) {
+            fallbackBtn = entry;
+            break;
+          } else {
+            log("[DouyinScheduler] 尝试点击继续观看");
+            log(entry.label);
+            log(continueKeywords);
+          }
         }
       }
       if (fallbackBtn) break;
@@ -893,14 +904,14 @@ export class DouyinScheduler {
   }): { task: DouyinTaskDefinition; target: OCRFindResult } | null {
     const entries = this.ocrService.detectEntries(true);
     const doneEntries: OCREntry[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const label = entries[i].label;
+    for (const element of entries) {
+      const label = element.label;
       if (
         label.indexOf("已完成") >= 0 ||
         label.indexOf("明天来") >= 0 ||
         /\d{2}:\d{2}/.test(label)
       ) {
-        doneEntries.push(entries[i]);
+        doneEntries.push(element);
       }
     }
 
@@ -908,8 +919,8 @@ export class DouyinScheduler {
       .filter((task) => task.enabled)
       .sort((a, b) => a.priority - b.priority);
 
-    for (let i = 0; i < enabledTasks.length; i++) {
-      const task = enabledTasks[i];
+    for (const element of enabledTasks) {
+      const task = element;
       const finishedRuns = finishedTaskRuns[task.id] || 0;
       if (finishedRuns >= task.maxRuns) {
         continue;
@@ -928,8 +939,8 @@ export class DouyinScheduler {
   }
 
   private hasPendingTasks(finishedTaskRuns: { [taskId: string]: number }): boolean {
-    for (let i = 0; i < this.taskDefinitions.length; i++) {
-      const task = this.taskDefinitions[i];
+    for (const element of this.taskDefinitions) {
+      const task = element;
       if (!task.enabled) {
         continue;
       }
@@ -1017,14 +1028,14 @@ export class DouyinScheduler {
 
     const entries = this.ocrService.detectEntries(true);
     const lockedEntries: OCREntry[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const label = entries[i].label;
+    for (const element of entries) {
+      const label = element.label;
       if (
         label.indexOf("已完成") >= 0 ||
         label.indexOf("明天来") >= 0 ||
         /\d{2}:\d{2}/.test(label)
       ) {
-        lockedEntries.push(entries[i]);
+        lockedEntries.push(element);
       }
     }
 
@@ -1046,8 +1057,8 @@ export class DouyinScheduler {
     const keywords = Array.isArray(DOUYIN_UI_LEXICON.unsupportedTaskKeywords)
       ? DOUYIN_UI_LEXICON.unsupportedTaskKeywords
       : [DOUYIN_UI_LEXICON.unsupportedTaskKeywords];
-    for (let i = 0; i < keywords.length; i++) {
-      const key = String(keywords[i] || "")
+    for (const element of keywords) {
+      const key = String(element || "")
         .trim()
         .toLowerCase();
       if (key && normalized.indexOf(key) >= 0) {

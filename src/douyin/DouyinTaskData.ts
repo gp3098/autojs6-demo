@@ -78,7 +78,7 @@ export const DOUYIN_UI_LEXICON: DouyinUiLexicon = {
     "看视频拆开红包",
     "今日第",
     "个红包",
-    "累计已得",
+    /累计[已|己]得/,
   ],
   lotteryMaskKeywords: ["天天抽奖", "今天抽奖明天领", "立即抽奖"],
   lotteryDrawKeywords: ["立即抽奖"],

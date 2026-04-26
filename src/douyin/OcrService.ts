@@ -1,4 +1,4 @@
-export type OCRQuery = string | string[];
+export type OCRQuery = string | RegExp | Array<string | RegExp>;
 export type OCRMatchMode = "any" | "all";
 
 export interface OCRFindOptions {
@@ -19,7 +19,7 @@ export interface OCREntry {
 }
 
 export interface OCRFindResult {
-  query: string;
+  query: string | RegExp;
   entry: OCREntry;
 }
 
@@ -65,8 +65,7 @@ export class OcrService {
 
     if (matchMode === "all") {
       let firstMatch: OCRFindResult | null = null;
-      for (let i = 0; i < keywords.length; i++) {
-        const q = keywords[i];
+      for (const q of keywords) {
         const hit = this.findFirstEntry(entries, q, caseSensitive, exactMatch);
         if (!hit) {
           return null;
@@ -78,8 +77,7 @@ export class OcrService {
       return firstMatch;
     }
 
-    for (let i = 0; i < keywords.length; i++) {
-      const q = keywords[i];
+    for (const q of keywords) {
       const hit = this.findFirstEntry(entries, q, caseSensitive, exactMatch);
       if (hit) {
         return { query: q, entry: hit };
@@ -92,8 +90,8 @@ export class OcrService {
   public detectLabels(useSlim = true): string[] {
     const entries = this.detectEntries(useSlim);
     const labels: string[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      labels.push(entries[i].label);
+    for (const element of entries) {
+      labels.push(element.label);
     }
     return labels;
   }
@@ -143,9 +141,9 @@ export class OcrService {
       const arr = Array.from(rawResults as any[]);
       const entries: OCREntry[] = [];
 
-      for (let i = 0; i < arr.length; i++) {
-        const item: any = arr[i];
-        const label = String(item?.label || "").trim();
+      for (const element of arr) {
+        const item: any = element;
+        const label = opencc.t2s(String(item?.label || "").trim());
         const bounds = item?.bounds as OCRBoundsLike;
         if (
           !label ||
@@ -217,12 +215,16 @@ export class OcrService {
     }
   }
 
-  private normalizeQuery(query: OCRQuery, caseSensitive: boolean): string[] {
+  private normalizeQuery(query: OCRQuery, caseSensitive: boolean): (string | RegExp)[] {
     const source = Array.isArray(query) ? query : [query];
-    const out: string[] = [];
+    const out: (string | RegExp)[] = [];
 
-    for (let i = 0; i < source.length; i++) {
-      const normalized = String(source[i] || "").trim();
+    for (const q of source) {
+      if (q instanceof RegExp) {
+        out.push(q);
+        continue;
+      }
+      const normalized = String(q || "").trim();
       if (!normalized) {
         continue;
       }
@@ -234,20 +236,26 @@ export class OcrService {
 
   private findFirstEntry(
     entries: OCREntry[],
-    query: string,
+    query: string | RegExp,
     caseSensitive: boolean,
     exactMatch: boolean
   ): OCREntry | null {
-    for (let i = 0; i < entries.length; i++) {
-      const rawLabel = entries[i].label;
-      const label = caseSensitive ? rawLabel : rawLabel.toLowerCase();
-      if (exactMatch) {
-        if (label === query) {
-          return entries[i];
+    for (const element of entries) {
+      const rawLabel = element.label;
+      if (query instanceof RegExp) {
+        if (query.test(rawLabel)) {
+          return element;
         }
       } else {
-        if (label.indexOf(query) >= 0) {
-          return entries[i];
+        const label = caseSensitive ? rawLabel : rawLabel.toLowerCase();
+        if (exactMatch) {
+          if (label === query) {
+            return element;
+          }
+        } else {
+          if (label.indexOf(query) >= 0) {
+            return element;
+          }
         }
       }
     }
